@@ -125,7 +125,7 @@ class RagObservability:
             return None
 
         if not _OTEL_AVAILABLE:
-            print("⚠️  OpenTelemetry not installed. Install with: pip install rag-shared[observability]")
+            print("Warning: OpenTelemetry not installed. Install with: pip install rag-shared[observability]")
             return None
 
         # Create resource with service information
@@ -153,9 +153,9 @@ class RagObservability:
             span_processor = BatchSpanProcessor(otlp_exporter)
             provider.add_span_processor(span_processor)
 
-            print(f"✅ Tracing initialized for {service_name} -> {self.otlp_endpoint}")
+            print(f"Tracing initialized for {service_name} -> {self.otlp_endpoint}")
         except Exception as e:
-            print(f"⚠️  Failed to setup OTLP exporter: {e}")
+            print(f"Warning: Failed to setup OTLP exporter: {e}")
 
         return provider
 
@@ -197,9 +197,9 @@ class RagObservability:
                 excluded_urls="/health,/healthz,/ready,/metrics,/docs,/openapi.json",
                 tracer_provider=trace.get_tracer_provider() if trace else None,
             )
-            print("✅ FastAPI auto-instrumentation enabled")
+            print("FastAPI auto-instrumentation enabled")
         except Exception as e:
-            print(f"⚠️  Failed to instrument FastAPI: {e}")
+            print(f"Warning: Failed to instrument FastAPI: {e}")
 
     def instrument_flask(self, app: Any) -> None:
         """
@@ -217,9 +217,9 @@ class RagObservability:
                 excluded_urls="/health,/healthz,/ready,/metrics",
                 tracer_provider=trace.get_tracer_provider() if trace else None,
             )
-            print("✅ Flask auto-instrumentation enabled")
+            print("Flask auto-instrumentation enabled")
         except Exception as e:
-            print(f"⚠️  Failed to instrument Flask: {e}")
+            print(f"Warning: Failed to instrument Flask: {e}")
 
     def instrument_http_clients(self) -> None:
         """Auto-instrument HTTP clients (requests, httpx)."""
@@ -244,7 +244,7 @@ class RagObservability:
             except Exception:
                 pass  # Already instrumented or not available
 
-        print("✅ HTTP client auto-instrumentation enabled")
+        print("HTTP client auto-instrumentation enabled")
 
     def get_tracer(self, name: str) -> Any:
         """
@@ -335,12 +335,12 @@ def setup_observability(
         elif "Flask" in app_type:
             rag_observability.instrument_flask(app)
         else:
-            print(f"⚠️  Unknown app type: {app_type}, skipping instrumentation")
+            print(f"Warning: Unknown app type: {app_type}, skipping instrumentation")
 
     # Get logger for immediate use
     logger = rag_observability.get_logger(service_name)
     logger.info(
-        f"🚀 {service_name} observability initialized",
+        f"{service_name} observability initialized",
         extra={
             "tracing_enabled": rag_observability.tracing_enabled,
             "structured_logging_enabled": rag_observability.structured_logging_enabled,
