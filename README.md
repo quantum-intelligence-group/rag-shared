@@ -4,29 +4,51 @@ Shared utilities for RAG orchestration services.
 
 ## Features
 
-- **Structured JSON Logging** - Consistent log format for Loki/Grafana with request context and operation tracking
-- **OpenTelemetry Observability** - Distributed tracing with OTLP export and auto-instrumentation
-- **Dragonfly/Redis Client** - Simple cache client for inter-service data sharing
+- **Readable Logging** - Milvus-style format that's easy to read in terminals and Grafana
+- **OpenTelemetry Observability** - Distributed tracing with OTLP export (optional)
+- **Dragonfly/Redis Client** - Cache client for inter-service data sharing
 
 ## Installation
 
 ```bash
 # Basic (logging + dragonfly client)
-pip install git+https://github.com/yourorg/rag-shared.git
+pip install git+https://github.com/quantum-intelligence-group/rag-shared.git
 
 # With OpenTelemetry observability
-pip install "rag-shared[observability] @ git+https://github.com/yourorg/rag-shared.git"
-
-# All extras
-pip install "rag-shared[all] @ git+https://github.com/yourorg/rag-shared.git"
-
-# Pin to a specific version/tag
-pip install "rag-shared @ git+https://github.com/yourorg/rag-shared.git@v1.0.0"
+pip install "rag-shared[observability] @ git+https://github.com/quantum-intelligence-group/rag-shared.git"
 ```
 
 ## Quick Start
 
-### Full Observability (Tracing + Logging)
+### Logging
+
+```python
+from rag_shared import setup_logging, get_logger, timed
+
+# Setup once at startup
+setup_logging()
+
+# Get logger
+logger = get_logger(__name__)
+
+# Log messages
+logger.info("Processing started")
+logger.info("Chunk created", extra={"chunk_id": "abc", "size": 1024})
+
+# Time operations
+with timed("embed_chunks", logger, doc_id="doc-123"):
+    # ... work ...
+    pass
+```
+
+**Output:**
+```
+[2025/12/31 18:42:23.765 +00:00] [INFO] [main:12] ["Processing started"]
+[2025/12/31 18:42:23.780 +00:00] [INFO] [main:15] ["Chunk created"] [chunk_id=abc] [size=1024]
+[2025/12/31 18:42:24.100 +00:00] [INFO] [main:18] ["embed_chunks completed"] [duration_ms=315.2] [doc_id=doc-123]
+```
+
+### With OpenTelemetry Tracing
 
 ```python
 from fastapi import FastAPI
@@ -37,26 +59,8 @@ logger = setup_observability("my-service", app)
 
 @app.get("/")
 async def root():
-    logger.info("Processing request", extra={"endpoint": "/"})
+    logger.info("Processing request")
     return {"status": "ok"}
-```
-
-### Just Logging (No OpenTelemetry)
-
-```python
-from rag_shared import configure_logging, get_logger, stage
-
-# Configure once at startup
-configure_logging(service_name="my-service")
-
-# Get a logger
-logger = get_logger(__name__)
-logger.info("Service started")
-
-# Track operations with timing
-with stage("process_document", document_id="doc-123"):
-    # ... do work ...
-    pass  # Logs start, completion, and duration automatically
 ```
 
 ### Cache Client
@@ -74,107 +78,74 @@ cache.store("my-key", {"data": [1, 2, 3]}, ttl=3600)
 data = cache.retrieve("my-key")
 ```
 
-## Environment Variables
+## API Reference
 
-### Logging & Observability
+### Logging
+
+| Function | Description |
+|----------|-------------|
+| `setup_logging(level="INFO")` | Configure logging (call once at startup) |
+| `get_logger(name)` | Get a logger instance |
+| `timed(operation, logger, **extra)` | Context manager that logs completion with duration |
+| `log_context(**fields)` | Add fields to all logs within a context |
+
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SERVICE_NAME` | `unknown-service` | Service identifier |
-| `SERVICE_VERSION` | `1.0.0` | Service version |
-| `ENVIRONMENT` | `development` | Deployment environment |
 | `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARNING, ERROR) |
-| `TRACING_ENABLED` | `true` | Enable OpenTelemetry tracing |
-| `STRUCTURED_LOGGING_ENABLED` | `true` | Enable JSON log formatting |
-| `OTLP_ENDPOINT` | `http://localhost:4317` | OpenTelemetry collector endpoint |
-
-### Dragonfly/Redis
-
-| Variable | Default | Description |
-|----------|---------|-------------|
 | `DRAGONFLY_HOST` | `dragonfly` | Cache host |
 | `DRAGONFLY_PORT` | `6379` | Cache port |
 | `DRAGONFLY_TTL` | `3600` | Default TTL in seconds |
+| `OTLP_ENDPOINT` | `http://localhost:4317` | OpenTelemetry collector (when using observability) |
+| `TRACING_ENABLED` | `true` | Enable/disable tracing |
 
 ## Log Format
 
-All logs are JSON-formatted for easy parsing:
+Logs use a Milvus-style bracket format that's easy to read:
 
-```json
-{
-  "timestamp": "2024-01-15T10:30:00.000000+00:00",
-  "service": "my-service",
-  "version": "1.0.0",
-  "environment": "development",
-  "level": "INFO",
-  "logger": "my_module",
-  "message": "Processing request",
-  "module": "my_module",
-  "function": "my_function",
-  "line": 42,
-  "trace_id": "abc123...",
-  "span_id": "def456..."
-}
+```
+[timestamp] [LEVEL] [module:line] ["message"] [key=value] ...
 ```
 
-## Operation Tracking with `stage()`
-
-The `stage()` context manager automatically logs operation start, completion (or failure), and duration:
-
-```python
-from rag_shared import stage
-
-with stage("embed_chunks", document_id="doc-123", chunk_count=42):
-    # ... embedding logic ...
-    pass
+Example:
 ```
-
-Output:
-```json
-{"message": "embed_chunks_started", "operation": "embed_chunks", "document_id": "doc-123", "chunk_count": 42}
-{"message": "embed_chunks_completed", "operation": "embed_chunks", "document_id": "doc-123", "chunk_count": 42, "duration_ms": 1234.56}
+[2025/12/31 18:42:23.765 +00:00] [INFO] [chunking:42] ["Processing document"] [doc_id=abc-123]
+[2025/12/31 18:42:24.100 +00:00] [INFO] [chunking:50] ["embed_chunks completed"] [duration_ms=315.2]
+[2025/12/31 18:42:24.200 +00:00] [ERROR] [chunking:55] ["Failed to process"] [error=Connection timeout]
 ```
 
 ## Request Context
 
-Add context that persists across all logs in a request:
+Add fields to all logs within a request without passing them everywhere:
 
 ```python
-from rag_shared import RequestContext, get_logger
+from rag_shared import log_context, get_logger
 
 logger = get_logger(__name__)
 
-with RequestContext(request_id="req-123", user_id="user-456"):
+with log_context(request_id="req-123", user_id="user-456"):
     logger.info("Step 1")  # Includes request_id and user_id
-    logger.info("Step 2")  # Also includes request_id and user_id
+    do_work()              # All logs inside also get these fields
+    logger.info("Step 2")  # Also includes them
 ```
 
-## Migration from Service-Local Logging
+## Migration from v1.x
 
-Replace your service's local logging setup:
+The API is backward compatible. Old code will continue to work:
 
 ```python
-# Before (service-local)
-from app.logging import get_logger, stage
-configure_logging()
-
-# After (shared package)
-from rag_shared import configure_logging, get_logger, stage
+# Old API (still works)
+from rag_shared import configure_logging, stage
 configure_logging(service_name="my-service")
+with stage("operation"):
+    pass
+
+# New API (preferred)
+from rag_shared import setup_logging, timed
+setup_logging()
+with timed("operation"):
+    pass
 ```
 
-## Development
-
-```bash
-# Clone and install in development mode
-git clone https://github.com/yourorg/rag-shared.git
-cd rag-shared
-pip install -e ".[dev,all]"
-
-# Run tests
-pytest
-
-# Format code
-black src/
-ruff check src/ --fix
-```
+The main change is the log format: JSON is replaced with readable Milvus-style brackets.

@@ -1,126 +1,245 @@
 """
-Unified Structured Logging for RAG Orchestration Services
+Simple, readable logging for RAG services.
 
-Consolidates logging patterns from across all services into a single module.
-Provides JSON-formatted logs with request context and operation tracking.
-
-Features:
-- JSON structured logging for easy parsing by Loki/Grafana
-- Request-scoped context via ContextVars (async-safe)
-- Operation tracking with duration metrics via `stage()` context manager
-- Optional OpenTelemetry trace correlation (when observability module is used)
+Output format (Milvus-style):
+    [2025/12/31 18:42:23.765 +00:00] [INFO] [module:42] ["Message here"] [key=value]
 
 Usage:
-    from rag_shared.logging import configure_logging, get_logger, stage
+    from rag_shared import setup_logging, get_logger, timed
 
-    # Configure once at startup
-    configure_logging(service_name="my-service", log_level="INFO")
-
-    # Get logger
+    setup_logging()  # Call once at startup
     logger = get_logger(__name__)
-    logger.info("Something happened", extra={"user_id": "123"})
 
-    # Track operations with timing
-    with stage("process_document", document_id="doc-123"):
-        # ... do work ...
-        pass  # Automatically logs start, completion/failure, and duration
+    logger.info("Processing started")
+    logger.info("Chunk created", extra={"chunk_id": "abc", "size": 1024})
+
+    with timed("embed_chunks", logger):
+        # ... work ...
+        pass
+    # Output: [timestamp] [INFO] [module:42] ["embed_chunks completed"] [duration_ms=123.4]
 """
 
-import json
 import logging
-import logging.config
 import os
 import sys
 import time
-import traceback
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Dict, Generator, Optional
 
-# Context variable for request-scoped data (async-safe)
-request_context: ContextVar[Dict[str, Any]] = ContextVar("request_context", default={})
+
+# Context for request-scoped fields (optional feature)
+_log_context: ContextVar[Dict[str, Any]] = ContextVar("log_context", default={})
 
 
-class StructuredJSONFormatter(logging.Formatter):
+def _format_value(value: Any) -> str:
+    """Format a value for bracket output."""
+    if value is None:
+        return "null"
+    elif isinstance(value, bool):
+        return str(value).lower()
+    elif isinstance(value, str):
+        # Quote strings with spaces or special chars
+        if " " in value or '"' in value or not value:
+            # Escape quotes and wrap
+            return f'"{value}"'
+        return value
+    elif isinstance(value, (list, tuple)):
+        # Format as JSON-like array
+        items = ", ".join(_format_value(v) for v in value)
+        return f"[{items}]"
+    elif isinstance(value, dict):
+        # Format as JSON-like object
+        items = ", ".join(f"{k}: {_format_value(v)}" for k, v in value.items())
+        return f"{{{items}}}"
+    elif isinstance(value, float):
+        # Round floats for readability
+        if value == int(value):
+            return str(int(value))
+        return f"{value:.2f}"
+    else:
+        return str(value)
+
+
+class MilvusFormatter(logging.Formatter):
     """
-    JSON formatter that produces structured logs for Loki/Grafana.
+    Milvus-style log formatter.
 
-    Includes:
-    - Service metadata (name, version, environment)
-    - Request context from ContextVar
-    - OpenTelemetry trace correlation (if available)
-    - Exception details with traceback
+    Output: [timestamp] [LEVEL] [module:line] ["message"] [key=value] ...
     """
 
-    def __init__(
-        self,
-        service_name: str = "unknown-service",
-        service_version: str = "1.0.0",
-        environment: str = "development",
-    ):
-        super().__init__()
-        self.service_name = service_name
-        self.service_version = service_version
-        self.environment = environment
+    # Keys from LogRecord that we handle specially or should skip
+    SKIP_KEYS = frozenset({
+        "name", "msg", "args", "levelname", "levelno", "pathname",
+        "filename", "module", "exc_info", "exc_text", "stack_info",
+        "lineno", "funcName", "created", "msecs", "relativeCreated",
+        "thread", "threadName", "processName", "process", "taskName",
+        "message",
+    })
 
     def format(self, record: logging.LogRecord) -> str:
-        """Format log record as JSON with all context."""
+        # Timestamp: [2025/12/31 18:42:23.765 +00:00]
+        ts = datetime.fromtimestamp(record.created, timezone.utc)
+        ms = int(ts.microsecond / 1000)
+        timestamp = f"[{ts.strftime('%Y/%m/%d %H:%M:%S')}.{ms:03d} +00:00]"
 
-        # Base log structure
-        log_entry: Dict[str, Any] = {
-            "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
-            "service": self.service_name,
-            "version": self.service_version,
-            "environment": self.environment,
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-            "module": record.module,
-            "function": record.funcName,
-            "line": record.lineno,
-        }
+        # Level: [INFO]
+        level = f"[{record.levelname}]"
 
-        # Add request context from ContextVar
-        context = request_context.get({})
-        if context:
-            log_entry["context"] = context
+        # Location: [module:line]
+        location = f"[{record.module}:{record.lineno}]"
 
-        # Add OpenTelemetry trace correlation if available
-        try:
-            from opentelemetry import trace
+        # Message: ["message text"]
+        message = f'["{record.getMessage()}"]'
 
-            current_span = trace.get_current_span()
-            if current_span and current_span.is_recording():
-                span_context = current_span.get_span_context()
-                log_entry["trace_id"] = format(span_context.trace_id, "032x")
-                log_entry["span_id"] = format(span_context.span_id, "016x")
-                log_entry["trace_flags"] = span_context.trace_flags
-        except ImportError:
-            pass  # OpenTelemetry not installed
+        # Start building output
+        parts = [timestamp, level, location, message]
 
-        # Add exception information if present
-        if record.exc_info and record.exc_info[0] is not None:
-            log_entry["exception"] = {
-                "type": record.exc_info[0].__name__,
-                "message": str(record.exc_info[1]) if record.exc_info[1] else None,
-                "traceback": traceback.format_exception(*record.exc_info),
-            }
+        # Add context fields (from log_context)
+        ctx = _log_context.get({})
+        for key, value in ctx.items():
+            parts.append(f"[{key}={_format_value(value)}]")
 
-        # Add extra fields from record (user-provided extras)
-        skip_keys = {
-            "name", "msg", "args", "levelname", "levelno", "pathname",
-            "filename", "module", "exc_info", "exc_text", "stack_info",
-            "lineno", "funcName", "created", "msecs", "relativeCreated",
-            "thread", "threadName", "processName", "process", "getMessage",
-            "message", "taskName",
-        }
+        # Add extra fields from the log call
         for key, value in record.__dict__.items():
-            if key not in skip_keys and not key.startswith("_"):
-                log_entry[key] = value
+            if key not in self.SKIP_KEYS and not key.startswith("_"):
+                parts.append(f"[{key}={_format_value(value)}]")
 
-        return json.dumps(log_entry, ensure_ascii=False, separators=(",", ":"), default=str)
+        # Add exception info if present
+        if record.exc_info and record.exc_info[0] is not None:
+            exc_type = record.exc_info[0].__name__
+            exc_msg = str(record.exc_info[1]) if record.exc_info[1] else ""
+            parts.append(f"[exception={exc_type}: {exc_msg}]")
 
+        return " ".join(parts)
+
+
+def setup_logging(level: Optional[str] = None) -> None:
+    """
+    Configure logging with Milvus-style readable output.
+
+    Args:
+        level: Log level (DEBUG, INFO, WARNING, ERROR).
+               Defaults to LOG_LEVEL env var or "INFO".
+
+    Example:
+        setup_logging()  # Uses INFO or LOG_LEVEL env var
+        setup_logging("DEBUG")  # Explicit debug level
+    """
+    level = level or os.getenv("LOG_LEVEL", "INFO")
+
+    # Clear existing handlers
+    root = logging.getLogger()
+    root.handlers.clear()
+
+    # Setup handler with Milvus formatter
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(MilvusFormatter())
+
+    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+    root.addHandler(handler)
+
+    # Quiet noisy libraries
+    for name in ("urllib3", "httpx", "httpcore", "asyncio", "opentelemetry"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    """
+    Get a logger instance.
+
+    Args:
+        name: Logger name, typically __name__
+
+    Returns:
+        Logger instance
+    """
+    return logging.getLogger(name)
+
+
+@contextmanager
+def timed(
+    operation: str,
+    logger: Optional[logging.Logger] = None,
+    **extra: Any,
+) -> Generator[Dict[str, Any], None, None]:
+    """
+    Time an operation and log completion/failure with duration.
+
+    Args:
+        operation: Name of the operation (e.g., "embed_chunks", "parse_document")
+        logger: Logger to use. If None, uses a logger named after the operation.
+        **extra: Additional fields to include in the log.
+
+    Yields:
+        Dict that can be updated with additional context during the operation.
+
+    Example:
+        with timed("embed_chunks", logger, doc_id="abc"):
+            result = embed(chunks)
+            # Optionally add more context:
+        # Logs: ["embed_chunks completed"] [duration_ms=123.4] [doc_id=abc]
+
+        # Or capture the context dict:
+        with timed("process", logger) as ctx:
+            ctx["items_processed"] = 42
+        # Logs: ["process completed"] [duration_ms=50.2] [items_processed=42]
+    """
+    log = logger or get_logger(operation)
+    ctx: Dict[str, Any] = dict(extra)
+    start = time.perf_counter()
+
+    try:
+        yield ctx
+        duration = (time.perf_counter() - start) * 1000
+        log.info(f"{operation} completed", extra={**ctx, "duration_ms": round(duration, 2)})
+    except Exception as e:
+        duration = (time.perf_counter() - start) * 1000
+        log.error(
+            f"{operation} failed",
+            extra={**ctx, "duration_ms": round(duration, 2), "error": str(e)},
+            exc_info=True,
+        )
+        raise
+
+
+@contextmanager
+def log_context(**fields: Any) -> Generator[None, None, None]:
+    """
+    Add fields to all logs within this context.
+
+    Useful for adding request_id or other context that should appear
+    in all logs during a request/operation without passing it everywhere.
+
+    Args:
+        **fields: Fields to add to all logs within this context.
+
+    Example:
+        with log_context(request_id="abc-123", user_id="user-456"):
+            logger.info("Processing started")  # Includes request_id and user_id
+            do_work()  # All logs inside also get these fields
+            logger.info("Processing done")  # Also includes them
+    """
+    existing = _log_context.get({})
+    merged = {**existing, **fields}
+    token = _log_context.set(merged)
+    try:
+        yield
+    finally:
+        _log_context.reset(token)
+
+
+def clear_log_context() -> None:
+    """Clear all fields from the current log context."""
+    _log_context.set({})
+
+
+# =============================================================================
+# Backward compatibility aliases
+# =============================================================================
+# These maintain compatibility with existing code that uses the old API names.
+# New code should use the new names: setup_logging, timed, log_context
 
 def configure_logging(
     service_name: Optional[str] = None,
@@ -130,183 +249,77 @@ def configure_logging(
     json_output: bool = True,
 ) -> None:
     """
-    Configure structured logging for the service.
+    DEPRECATED: Use setup_logging() instead.
 
-    Args:
-        service_name: Name of the service (default: SERVICE_NAME env var or "unknown-service")
-        service_version: Version string (default: SERVICE_VERSION env var or "1.0.0")
-        environment: Environment name (default: ENVIRONMENT env var or "development")
-        log_level: Log level (default: LOG_LEVEL env var or "INFO")
-        json_output: If True, use JSON formatting; if False, use standard format
+    This function is kept for backward compatibility.
+    The service_name, service_version, environment, and json_output
+    parameters are now ignored - all output uses the readable Milvus format.
     """
-    # Resolve from environment variables with fallbacks
-    service_name = service_name or os.getenv("SERVICE_NAME", "unknown-service")
-    service_version = service_version or os.getenv("SERVICE_VERSION", "1.0.0")
-    environment = environment or os.getenv("ENVIRONMENT", "development")
-    log_level = log_level or os.getenv("LOG_LEVEL", "INFO")
-
-    # Remove existing handlers from root logger
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers[:]:
-        root_logger.removeHandler(handler)
-
-    # Create handler with appropriate formatter
-    handler = logging.StreamHandler(sys.stdout)
-
-    if json_output:
-        formatter = StructuredJSONFormatter(
-            service_name=service_name,
-            service_version=service_version,
-            environment=environment,
-        )
-    else:
-        formatter = logging.Formatter(
-            fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S",
-        )
-
-    handler.setFormatter(formatter)
-
-    # Configure root logger
-    root_logger.setLevel(getattr(logging, log_level.upper(), logging.INFO))
-    root_logger.addHandler(handler)
-
-    # Quiet noisy loggers
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    setup_logging(level=log_level)
 
 
-def get_logger(name: Optional[str] = None) -> logging.Logger:
-    """
-    Get a logger instance.
+# Alias: stage -> timed
+stage = timed
 
-    Args:
-        name: Logger name (typically __name__). If None, returns root logger.
-
-    Returns:
-        Configured logger instance.
-    """
-    return logging.getLogger(name)
-
-
+# Alias: RequestContext -> log_context (as a class-like wrapper)
 class RequestContext:
     """
-    Context manager for request-scoped logging context.
+    DEPRECATED: Use log_context() instead.
 
-    Any logs emitted within this context will include the provided fields.
-    Async-safe via ContextVar.
-
-    Usage:
-        with RequestContext(request_id="abc-123", user_id="user-456"):
-            logger.info("Processing request")  # Includes request_id and user_id
+    Kept for backward compatibility.
     """
-
     def __init__(self, **context: Any):
         self.context = context
-        self._token = None
+        self._cm = None
 
-    def __enter__(self) -> "RequestContext":
-        # Merge with existing context
-        existing = request_context.get({})
-        merged = {**existing, **self.context}
-        self._token = request_context.set(merged)
+    def __enter__(self):
+        self._cm = log_context(**self.context)
+        self._cm.__enter__()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        if self._token is not None:
-            request_context.reset(self._token)
+    def __exit__(self, *args):
+        if self._cm:
+            self._cm.__exit__(*args)
 
 
-@contextmanager
-def stage(
-    operation: str,
-    logger: Optional[logging.Logger] = None,
-    log_start: bool = True,
-    **context: Any,
-) -> Generator[Dict[str, Any], None, None]:
-    """
-    Context manager for tracking operation stages with timing.
-
-    Automatically logs operation start (optional), completion, and failure
-    with duration metrics. Perfect for tracing pipeline stages.
-
-    Args:
-        operation: Name of the operation/stage (e.g., "parse_document", "embed_chunks")
-        logger: Logger to use. If None, creates one named "stage.{operation}"
-        log_start: Whether to log when the stage starts (default: True)
-        **context: Additional context fields to include in logs
-
-    Yields:
-        Dict that can be updated with additional context during the operation.
-
-    Usage:
-        with stage("process_document", document_id="doc-123") as ctx:
-            # ... do work ...
-            ctx["chunks_created"] = 42  # Add more context
-        # Automatically logs completion with duration_ms
-
-    Example output:
-        {"message": "process_document_started", "operation": "process_document", "document_id": "doc-123"}
-        {"message": "process_document_completed", "operation": "process_document", "document_id": "doc-123", "duration_ms": 1234.5}
-    """
-    if logger is None:
-        logger = get_logger(f"stage.{operation}")
-
-    start_time = time.perf_counter()
-    stage_context: Dict[str, Any] = {"operation": operation, **context}
-
-    if log_start:
-        logger.info(f"{operation}_started", extra=stage_context)
-
-    try:
-        yield stage_context
-        duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.info(
-            f"{operation}_completed",
-            extra={**stage_context, "duration_ms": round(duration_ms, 2)},
-        )
-    except Exception as e:
-        duration_ms = (time.perf_counter() - start_time) * 1000
-        logger.error(
-            f"{operation}_failed",
-            extra={
-                **stage_context,
-                "duration_ms": round(duration_ms, 2),
-                "error": str(e),
-                "error_type": type(e).__name__,
-            },
-        )
-        raise
-
-
+# Alias: add_context -> simple function that adds to current context
 def add_context(**context: Any) -> None:
     """
-    Add fields to the current request context.
+    DEPRECATED: Use log_context() context manager instead.
 
-    Useful for adding context mid-request without a context manager.
-
-    Args:
-        **context: Fields to add to the current context.
+    Add fields to the current log context.
     """
-    existing = request_context.get({})
-    merged = {**existing, **context}
-    request_context.set(merged)
+    existing = _log_context.get({})
+    _log_context.set({**existing, **context})
 
 
-def clear_context() -> None:
-    """Clear the current request context."""
-    request_context.set({})
+# Alias: clear_context -> clear_log_context
+clear_context = clear_log_context
+
+# Alias: request_context -> _log_context (for direct access if needed)
+request_context = _log_context
+
+# Placeholder for old formatter reference
+StructuredJSONFormatter = MilvusFormatter
 
 
-# Convenience exports
+# =============================================================================
+# Exports
+# =============================================================================
 __all__ = [
-    "configure_logging",
+    # New API (preferred)
+    "setup_logging",
     "get_logger",
+    "timed",
+    "log_context",
+    "clear_log_context",
+    # Backward compatibility (deprecated but functional)
+    "configure_logging",
     "stage",
     "RequestContext",
     "add_context",
     "clear_context",
     "request_context",
     "StructuredJSONFormatter",
+    "MilvusFormatter",
 ]

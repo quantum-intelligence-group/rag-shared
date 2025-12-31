@@ -73,8 +73,8 @@ try:
 except ImportError:
     LoggingInstrumentor = None
 
-# Import our logging module for structured logging setup
-from .logging import configure_logging, get_logger
+# Import our logging module
+from .logging import setup_logging, get_logger
 
 
 class RagObservability:
@@ -159,33 +159,27 @@ class RagObservability:
 
         return provider
 
-    def setup_logging(self, service_name: str) -> None:
+    def init_logging(self, service_name: str) -> None:
         """
-        Initialize structured JSON logging with trace correlation.
+        Initialize logging with Milvus-style format.
 
         Args:
-            service_name: Name of the service for log attribution.
+            service_name: Name of the service (for log messages).
         """
         if not self.structured_logging_enabled:
             return
 
-        # Use the unified logging module
-        configure_logging(
-            service_name=service_name,
-            service_version=self.service_version,
-            environment=self.environment,
-            log_level=self.log_level,
-            json_output=True,
-        )
+        # Use the logging module
+        setup_logging(level=self.log_level)
 
         # Instrument logging to add trace correlation automatically
         if self.tracing_enabled and LoggingInstrumentor is not None:
             try:
                 LoggingInstrumentor().instrument(set_logging_format=False)
             except Exception as e:
-                print(f"⚠️  Failed to instrument logging: {e}")
+                print(f"Warning: Failed to instrument logging: {e}")
 
-        print(f"✅ Structured logging initialized for {service_name} (level: {self.log_level})")
+        print(f"Logging initialized for {service_name} (level: {self.log_level})")
 
     def instrument_fastapi(self, app: Any) -> None:
         """
@@ -326,8 +320,8 @@ def setup_observability(
     # Initialize tracing
     rag_observability.setup_tracing(service_name)
 
-    # Initialize structured logging
-    rag_observability.setup_logging(service_name)
+    # Initialize logging
+    rag_observability.init_logging(service_name)
 
     # Auto-instrument HTTP clients
     if instrument_http:

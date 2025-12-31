@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "rag-shared"
-version = "1.0.0"
+version = "2.0.0"
 description = "Shared utilities for RAG orchestration services"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -67,8 +67,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourorg/rag-shared"
-Repository = "https://github.com/yourorg/rag-shared"
+Homepage = "https://github.com/quantum-intelligence-group/rag-shared"
+Repository = "https://github.com/quantum-intelligence-group/rag-shared"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rag_shared"]
