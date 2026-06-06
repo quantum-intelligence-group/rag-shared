@@ -59,6 +59,7 @@ from .dragonfly import (
 # =============================================================================
 from .observability import (
     setup_observability,
+    emit_event,
     rag_observability,
     RagObservability,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "get_dragonfly_client",
     # Observability
     "setup_observability",
+    "emit_event",
     "rag_observability",
     "RagObservability",
 ]
