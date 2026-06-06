@@ -28,8 +28,10 @@ Environment Variables:
     LOG_LEVEL: Logging level (default: "INFO")
 """
 
+import json
 import logging
 import os
+import sys
 from typing import Any, Optional
 
 # Conditional OpenTelemetry imports with graceful fallbacks
@@ -277,6 +279,108 @@ class RagObservability:
 rag_observability = RagObservability()
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Operational event emitter (relay-compatible JSON)
+#
+# The relay parses each stdout line as JSON to extract `event`; the readable
+# MilvusFormatter logs are bracket-format and are dropped by the relay. These
+# helpers emit single-line JSON operational events so handler lifecycle /
+# dependency checks / heartbeat reach QIG Loki — the Python equivalent of the
+# Rust services' observability floor. They are intentionally separate from the
+# human-readable logger.
+# ──────────────────────────────────────────────────────────────────────────
+
+def emit_event(event: str, level: str = "info", **fields: Any) -> None:
+    """Write one relay-forwardable JSON operational event to stdout.
+
+    `event` must be an allow-listed name (handler_*, service_*, dependency_*,
+    stage_*, job_*, heartbeat). Never pass content fields — counts/ids only.
+    """
+    record = {
+        "event": event,
+        "level": level,
+        "service": os.getenv("SERVICE_NAME", rag_observability.service_name),
+    }
+    for key, value in fields.items():
+        if value is not None:
+            record[key] = value
+    try:
+        sys.stdout.write(json.dumps(record) + "\n")
+        sys.stdout.flush()
+    except Exception:
+        # Telemetry must never break the request path.
+        pass
+
+
+async def _heartbeat_loop(service_name: str, interval_secs: int = 60) -> None:
+    import asyncio
+
+    while True:
+        await asyncio.sleep(interval_secs)
+        emit_event("heartbeat", service=service_name)
+
+
+def _wire_fastapi_floor(app: Any, service_name: str) -> None:
+    """Add the observability floor to a FastAPI/Starlette app: handler-lifecycle
+    logging middleware, service_ready/service_shutdown lifecycle events, and a
+    60s liveness heartbeat. All emitted as JSON via emit_event."""
+    import asyncio
+    import time as _time
+
+    skip_paths = {
+        "/health", "/health/live", "/health/ready", "/ready", "/readyz",
+        "/livez", "/metrics", "/docs", "/openapi.json",
+    }
+
+    @app.middleware("http")
+    async def _handler_lifecycle(request, call_next):
+        path = request.url.path
+        method = request.method
+        request_id = request.headers.get("x-request-id", "")
+        logged = path not in skip_paths
+        start = _time.perf_counter()
+        if logged:
+            emit_event("handler_entry", method=method, path=path, request_id=request_id)
+        response = await call_next(request)
+        if logged:
+            duration_ms = round((_time.perf_counter() - start) * 1000)
+            sc = response.status_code
+            if sc >= 500:
+                ev, lvl = "handler_error", "error"
+            elif sc == 404:
+                ev, lvl = "handler_not_found", "warn"
+            elif sc == 409:
+                ev, lvl = "handler_conflict", "warn"
+            elif sc >= 400:
+                ev, lvl = "handler_validation_error", "warn"
+            else:
+                ev, lvl = "handler_success", "info"
+            emit_event(ev, level=lvl, method=method, path=path,
+                       status_code=sc, duration_ms=duration_ms, request_id=request_id)
+        return response
+
+    # Wrap the app's existing lifespan rather than using add_event_handler:
+    # Starlette ignores on_startup/on_shutdown handlers when an explicit
+    # `lifespan=` is provided (as several services use), so wrapping is the only
+    # approach that fires for both lifespan- and event-style apps.
+    import contextlib
+
+    _prev_lifespan = app.router.lifespan_context
+
+    @contextlib.asynccontextmanager
+    async def _floor_lifespan(app_ref):
+        emit_event("service_ready", service=service_name)
+        heartbeat = asyncio.create_task(_heartbeat_loop(service_name))
+        try:
+            async with _prev_lifespan(app_ref):
+                yield
+        finally:
+            heartbeat.cancel()
+            emit_event("service_shutdown", service=service_name, graceful=True)
+
+    app.router.lifespan_context = _floor_lifespan
+
+
 def setup_observability(
     service_name: str,
     app: Optional[Any] = None,
@@ -332,6 +436,7 @@ def setup_observability(
         app_type = type(app).__name__
         if "FastAPI" in app_type or "Starlette" in app_type:
             rag_observability.instrument_fastapi(app)
+            _wire_fastapi_floor(app, service_name)
         elif "Flask" in app_type:
             rag_observability.instrument_flask(app)
         else:
@@ -348,12 +453,20 @@ def setup_observability(
         },
     )
 
+    # Relay-forwardable service_start (JSON; emitted for every service, framework or not).
+    emit_event(
+        "service_start",
+        service_version=rag_observability.service_version,
+        environment=rag_observability.environment,
+    )
+
     return logger
 
 
 # Convenience exports
 __all__ = [
     "setup_observability",
+    "emit_event",
     "rag_observability",
     "RagObservability",
 ]
