@@ -315,9 +315,15 @@ def emit_event(event: str, level: str = "info", **fields: Any) -> None:
 async def _heartbeat_loop(service_name: str, interval_secs: int = 60) -> None:
     import asyncio
 
+    # BL-212 — stamp the deployed image tag on every heartbeat, matching the Rust
+    # services. SERVICE_VERSION is set to ${IMAGE_TAG} by the compose observability
+    # anchor, so this is the tag the running image was pulled with — no separate
+    # version to maintain. Default "unknown" (not a fake "1.0.0") when unset; env
+    # is fixed for the process lifetime, so read once.
+    service_version = os.getenv("SERVICE_VERSION") or "unknown"
     while True:
         await asyncio.sleep(interval_secs)
-        emit_event("heartbeat", service=service_name)
+        emit_event("heartbeat", service=service_name, service_version=service_version)
 
 
 def _wire_fastapi_floor(app: Any, service_name: str) -> None:
