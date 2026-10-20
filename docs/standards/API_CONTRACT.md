@@ -1,16 +1,16 @@
 ---
 title: "API CONTRACT"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03T20:16:46Z
-product_id: nexusmig-rag-shared
-project_id: nexusmig-rag-shared
+product_id: rag-shared
+project_id: rag-shared
 file_kind: ApiContract
 author: 
 ---
 
-# API Contract — nexusmig-rag-shared
+# API Contract — rag-shared
 ## Overview
 
 This document defines the API contracts for project. All API changes must follow the versioning and deprecation policies below.

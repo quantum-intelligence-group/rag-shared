@@ -1,16 +1,16 @@
 ---
 title: "SESSION PROTOCOL"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03T20:16:46Z
-product_id: nexusmig-rag-shared
-project_id: nexusmig-rag-shared
+product_id: rag-shared
+project_id: rag-shared
 file_kind: SessionProtocol
 author: 
 ---
 
-# Session Protocol — nexusmig-rag-shared
+# Session Protocol — rag-shared
 > Managed by the Maker Velocity Framework. Classification: **high**.
 
 ---

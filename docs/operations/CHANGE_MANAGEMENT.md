@@ -1,16 +1,16 @@
 ---
 title: "CHANGE MANAGEMENT"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03T20:16:46Z
-product_id: nexusmig-rag-shared
-project_id: nexusmig-rag-shared
+product_id: rag-shared
+project_id: rag-shared
 file_kind: ChangeManagement
 author: 
 ---
 
-# Change Management — nexusmig-rag-shared
+# Change Management — rag-shared
 ## Change Classification
 
 | Class | Description | Approval | Lead Time |

@@ -1,16 +1,16 @@
 ---
 title: "HANDOFF CONTRACT"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03T20:16:46Z
-product_id: nexusmig-rag-shared
-project_id: nexusmig-rag-shared
+product_id: rag-shared
+project_id: rag-shared
 file_kind: HandoffContract
 author: 
 ---
 
-# Handoff Contract — nexusmig-rag-shared
+# Handoff Contract — rag-shared
 ## Session Handoff Requirements
 
 Every session must update the following files before closing:

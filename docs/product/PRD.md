@@ -1,16 +1,16 @@
 ---
 title: "PRD"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03T20:16:46Z
-product_id: nexusmig-rag-shared
-project_id: nexusmig-rag-shared
+product_id: rag-shared
+project_id: rag-shared
 file_kind: Prd
 author: 
 ---
 
-# Product Requirements — nexusmig-rag-shared
+# Product Requirements — rag-shared
 ## Overview
 
 A multi-language project (0 files, 0 lines) using unknown.

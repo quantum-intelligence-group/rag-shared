@@ -1,16 +1,16 @@
 ---
 title: "CLAUDE"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03T20:16:46Z
-product_id: nexusmig-rag-shared
-project_id: nexusmig-rag-shared
+product_id: rag-shared
+project_id: rag-shared
 file_kind: ClaudeMd
 author: 
 ---
 
-# CLAUDE.md — nexusmig-rag-shared
+# CLAUDE.md — rag-shared
 > **Governance:** This project runs under the Maker Velocity Framework. Classification: **high**.
 > **Principles:** Follows the 7 Maker Principles (outcome over output) — see `docs/governance/PRINCIPLES.md`.
 

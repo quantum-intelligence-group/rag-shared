@@ -1,6 +1,6 @@
 ---
 title: "DECISIONS"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03

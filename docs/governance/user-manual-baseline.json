@@ -1,0 +1,8 @@
+{
+  "_comment": "Grandfathered user-manual debt (R-25.1). rag-shared joined the QOS program through the Nexus migration (B-11652) with no manual; B-001 in docs/planning/BACKLOG.md writes it and removes this entry.",
+  "_generated": "2026-10-20",
+  "total": 1,
+  "members": [
+    "rag-shared"
+  ]
+}

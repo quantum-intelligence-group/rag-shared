@@ -1,16 +1,16 @@
 ---
 title: "PERFORMANCE BUDGET"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03T20:16:46Z
-product_id: nexusmig-rag-shared
-project_id: nexusmig-rag-shared
+product_id: rag-shared
+project_id: rag-shared
 file_kind: PerformanceBudget
 author: 
 ---
 
-# Performance Budget — nexusmig-rag-shared
+# Performance Budget — rag-shared
 ## Response Time Targets
 
 | Metric | Target | Measurement |

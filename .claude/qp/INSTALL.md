@@ -1,4 +1,4 @@
-# Installing Quantum Pack in nexusmig-rag-shared
+# Installing Quantum Pack in rag-shared
 
 This pack is already vendored under `.claude/qp` with its skills/hooks at the shared `.claude/` roots.
 To make enforcement active (optional — the pack is advisory until wired):

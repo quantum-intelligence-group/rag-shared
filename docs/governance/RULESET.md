@@ -1,16 +1,16 @@
 ---
 title: "RULESET"
-project: nexusmig-rag-shared
+project: rag-shared
 classification: high
 created: 2026-06-03T20:16:46Z
 updated: 2026-06-03T20:16:46Z
-product_id: nexusmig-rag-shared
-project_id: nexusmig-rag-shared
+product_id: rag-shared
+project_id: rag-shared
 file_kind: Ruleset
 author: 
 ---
 
-# Maker Velocity Framework Ruleset — nexusmig-rag-shared
+# Maker Velocity Framework Ruleset — rag-shared
 **Version:** 5.0.0
 
 **Classification:** high

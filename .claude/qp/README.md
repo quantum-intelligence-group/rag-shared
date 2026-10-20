@@ -1,4 +1,4 @@
-# Quantum Pack — nexusmig-rag-shared
+# Quantum Pack — rag-shared
 
 > Quantum Pack is a portable governance discipline that turns a coding CLI into an idea→outcome
 > lifecycle (capture → classify → visualize → create), with a build gate and machine-enforced rules.
