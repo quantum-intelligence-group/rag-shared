@@ -1,0 +1,17 @@
+{
+  "name": "quantum-pack",
+  "displayName": "Quantum Pack",
+  "version": "0.1.0",
+  "description": "A portable discipline that turns a coding CLI into an idea→outcome lifecycle.",
+  "commandNamespace": "qp",
+  "stages": ["capture", "classify", "visualize", "create"],
+  "operatorSkills": ["qp-coverage"],
+  "enforcement": {
+    "levels": ["off", "warn", "block"],
+    "default": "warn",
+    "incubation": "block"
+  },
+  "providers": ["claude"],
+  "substrateFree": true,
+  "license": "proprietary"
+}

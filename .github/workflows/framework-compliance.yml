@@ -1,0 +1,72 @@
+name: Framework Compliance
+
+# R-30 — Framework compliance is MANDATORY and fail-closed. Every QOS member repo runs this gate on every
+# PR so a repo missing canonical Maker/QP governance files cannot merge. This is the DURABLE control: a
+# tracked CI workflow (not a per-clone .git/hooks script, which was lost before). Make this check REQUIRED
+# in branch protection.
+#
+# This is the distributable TEMPLATE — each member repo carries its own copy of
+# scripts/compliance/{scan.mjs,maker-scaffold.json} (vendored by the additive scaffolder) and self-scans
+# its own checkout. The umbrella `--members` gate (all repos at once) runs on the Mac Studio via the
+# session protocol (CLAUDE.md Step 10), where every member is cloned.
+
+# B-2302. A PULL REQUEST BASED ON A FLEET BRANCH GOT NO CI AT ALL, AND NOTHING SAID SO.
+#
+# `pull_request: branches: [main]` filters on the pull request's BASE, so a stacked pull request, whose
+# base is the branch below it, matched nothing and no workflow ran. Measured 2026-09-03: three such pull
+# requests were merged with ZERO checks between them, and a fourth sat open, MERGEABLE, with zero checks
+# and nothing objecting. A reader cannot tell that board from a healthy one, and `pr-base-check` (B-1838)
+# positively ENDORSES stacking: it exists to catch a stacked pull request that wrongly declares `main`.
+# So the programme recommended a practice its own CI could not verify.
+#
+# `qos/**` is the fleet's branch namespace, so this adds runs only for pull requests that stack, which
+# are rare, and each one is work that would otherwise land with no verdict at all.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, 'qos/**']
+
+# B-10183. CANCEL A VERDICT NOBODY WILL READ.
+#
+# This workflow is the highest-volume one in the programme: 3,738 runs in the seven days to 2026-09-08,
+# 38.4% of all 9,725 runs across the seventeen member repos. It is copied into fifteen of them by the
+# additive scaffolder, and NOT ONE copy declared a concurrency group, so every superseded run went to
+# completion.
+#
+# WHAT THIS BLOCK ACTUALLY SAVES HERE, CORRECTED 2026-09-09 (B-10388). The number this change shipped on
+# was 1,618 runs a week, and it was a measurement of the wrong object. 1,618 counts SUPERSEDED COMMITS.
+# `cancel-in-progress` cancels a RUN, and only one still executing when the next run in its group starts.
+# This job's median duration is 13 seconds, so it is almost always finished before a successor arrives.
+# Measured over its most recent 200 runs with `scripts/ops/ci-cancellable.mjs` (B-10281): 1.0% were
+# cancellable and ZERO were cancelled. Over the full seven-day window: 2.1%, and ONE run cancelled.
+#
+# The block stays, because it is harmless and correct. It is NOT a saving, it must not be counted as one,
+# and the lever must be measured per workflow before it is pulled anywhere else: the share is a function
+# of DURATION, and this was the shortest job in the programme.
+#
+# Cancelling a superseded run loses nothing that could gate a merge. The gate passed 3,738 of 3,738
+# times, and the verdict that matters is the one on the head commit, which is the run this keeps.
+#
+# Grouped by workflow + ref, which is the shape that makes `main` safe: a push to `main` and a pull
+# request are different refs and never cancel each other. `cancel-in-progress` is deliberately FALSE on
+# `main` (see the expression) because a push there is a landed commit whose verdict is a record, not a
+# preview. That exclusion was checked rather than assumed: over the most recent 100 runs of this workflow
+# in QOS, 89 were `pull_request` and 11 were `push` to `main`. So excluding `main` forgoes roughly a
+# ninth of the available saving and never cancels the verdict on a commit that actually landed, which is
+# the right side of that trade for a REQUIRED check.
+concurrency:
+  group: framework-compliance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  compliance-gate:
+    name: framework compliance (R-30.1, fail-closed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Self-compliance gate (this repo must be 100%)
+        run: node scripts/compliance/scan.mjs "$GITHUB_WORKSPACE" --gate
