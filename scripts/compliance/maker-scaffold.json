@@ -1,0 +1,234 @@
+{
+  "_comment": "Canonical Maker + Quantum-Pack governance scaffold checklists used by scan.mjs to compute per-repo framework compliance. The Maker list is derived from the authoritative QIG-Maker-Standards repo (the named categories: root governance trio + .mvp-framework + docs/{governance,state,planning,process,standards,product,compliance,operations,architecture}). The QP list is the 8-artifact Quantum Pack scaffold. Regenerate the maker list with scripts/compliance/regen-manifest.mjs against a fresh clone of the standard.",
+  "maker": {
+    "source": "quantum-intelligence-group/QIG-Maker-Standards",
+    "source_sha": "74f550655e5a1e15061216c878c8d9ed2aa6ac4c",
+    "pinned_at": "2026-06-20",
+    "note": "42 artifacts in the named canonical categories. The Product-Families report cited 48; the ~6 delta is README.md + the docs/{design,integration,requirements,prompts,reports,user-guide} READMEs, which are NOT in the named-category formula. Confirm with the operator whether to extend the denominator.",
+    "artifacts": [
+      {
+        "path": "CLAUDE.md",
+        "category": "root"
+      },
+      {
+        "path": "AGENTS.md",
+        "category": "root"
+      },
+      {
+        "path": "OPERATIVE.md",
+        "category": "root"
+      },
+      {
+        "path": ".mvp-framework.toml",
+        "category": "root",
+        "aliases": [
+          ".mvp-framework"
+        ]
+      },
+      {
+        "path": "docs/governance/PRINCIPLES.md",
+        "category": "governance"
+      },
+      {
+        "path": "docs/governance/RULESET.md",
+        "category": "governance"
+      },
+      {
+        "path": "docs/governance/SESSION_PROTOCOL.md",
+        "category": "governance"
+      },
+      {
+        "path": "docs/governance/LLM_BOUNDARIES.md",
+        "category": "governance"
+      },
+      {
+        "path": "docs/governance/PROMPT_SAFETY.md",
+        "category": "governance"
+      },
+      {
+        "path": "docs/governance/classification-footers.md",
+        "category": "governance"
+      },
+      {
+        "path": "docs/state/STATUS.md",
+        "category": "state"
+      },
+      {
+        "path": "docs/state/HANDOFF.md",
+        "category": "state"
+      },
+      {
+        "path": "docs/state/CHANGELOG.md",
+        "category": "state"
+      },
+      {
+        "path": "docs/state/DECISIONS.md",
+        "category": "state"
+      },
+      {
+        "path": "docs/state/OPEN_QUESTIONS.md",
+        "category": "state"
+      },
+      {
+        "path": "docs/state/RISKS.md",
+        "category": "state"
+      },
+      {
+        "path": "docs/planning/BACKLOG.md",
+        "category": "planning"
+      },
+      {
+        "path": "docs/planning/EXECUTION_PLAN.md",
+        "category": "planning"
+      },
+      {
+        "path": "docs/process/RELEASE_PROCESS.md",
+        "category": "process"
+      },
+      {
+        "path": "docs/process/FEATURE_LIFECYCLE.md",
+        "category": "process"
+      },
+      {
+        "path": "docs/process/ESCALATION_POLICY.md",
+        "category": "process"
+      },
+      {
+        "path": "docs/process/HANDOFF_CONTRACT.md",
+        "category": "process"
+      },
+      {
+        "path": "docs/standards/API_CONTRACT.md",
+        "category": "standards"
+      },
+      {
+        "path": "docs/standards/BUILD_AND_TEST.md",
+        "category": "standards"
+      },
+      {
+        "path": "docs/standards/CONVENTIONS.md",
+        "category": "standards"
+      },
+      {
+        "path": "docs/standards/DEFINITION_OF_DONE.md",
+        "category": "standards"
+      },
+      {
+        "path": "docs/standards/DEPENDENCIES.md",
+        "category": "standards"
+      },
+      {
+        "path": "docs/standards/DEPLOYMENT.md",
+        "category": "standards"
+      },
+      {
+        "path": "docs/standards/PERFORMANCE_BUDGET.md",
+        "category": "standards"
+      },
+      {
+        "path": "docs/standards/SCHEMA_CHANGE_POLICY.md",
+        "category": "standards"
+      },
+      {
+        "path": "docs/product/PRD.md",
+        "category": "product"
+      },
+      {
+        "path": "docs/product/CAPABILITIES.md",
+        "category": "product"
+      },
+      {
+        "path": "docs/product/USE_CASES.md",
+        "category": "product"
+      },
+      {
+        "path": "docs/product/GLOSSARY.md",
+        "category": "product"
+      },
+      {
+        "path": "docs/compliance/COMPLIANCE_MATRIX.md",
+        "category": "compliance"
+      },
+      {
+        "path": "docs/compliance/DATA_GOVERNANCE.md",
+        "category": "compliance"
+      },
+      {
+        "path": "docs/compliance/VULNERABILITY_POLICY.md",
+        "category": "compliance"
+      },
+      {
+        "path": "docs/operations/SECURITY_MODEL.md",
+        "category": "operations"
+      },
+      {
+        "path": "docs/operations/CHANGE_MANAGEMENT.md",
+        "category": "operations"
+      },
+      {
+        "path": "docs/operations/INCIDENT_RESPONSE.md",
+        "category": "operations"
+      },
+      {
+        "path": "docs/operations/MONITORING.md",
+        "category": "operations"
+      },
+      {
+        "path": "docs/architecture/ARCHITECTURE.md",
+        "category": "architecture"
+      }
+    ]
+  },
+  "quantumPack": {
+    "note": "INFORMATIONAL ONLY as of 2026-07-19 (B-969). Maker supersedes the Quantum Pack on every active QIG repo, so these artifacts are measured and reported but DO NOT decide compliance: scan.mjs gates on Maker artifacts alone. Kept measured so it stays visible which repos still carry QP surfaces while they are retired. 8-artifact Quantum Pack scaffold. Pack-root artifacts (RULES/GOVERNANCE/README/INSTALL/quantum-pack.json + lineage/) are measured at the repo's BEST pack root (the candidate root with the most present). skills/ + hooks/ are measured at the SHARED .claude/ level, since QP installs them there for use across all packs (qp/di/pat). Decision 2026-06-20.",
+    "packRootCandidates": [
+      ".claude/qp",
+      ".claude/cp",
+      "quantum-pack",
+      ".quantum-pack"
+    ],
+    "sharedRoot": ".claude",
+    "artifacts": [
+      {
+        "path": "RULES.md",
+        "type": "file",
+        "loc": "packRoot"
+      },
+      {
+        "path": "GOVERNANCE.md",
+        "type": "file",
+        "loc": "packRoot"
+      },
+      {
+        "path": "README.md",
+        "type": "file",
+        "loc": "packRoot"
+      },
+      {
+        "path": "INSTALL.md",
+        "type": "file",
+        "loc": "packRoot"
+      },
+      {
+        "path": "quantum-pack.json",
+        "type": "file",
+        "loc": "packRoot"
+      },
+      {
+        "path": "lineage",
+        "type": "dir",
+        "loc": "packRoot"
+      },
+      {
+        "path": "skills",
+        "type": "dir",
+        "loc": "claudeShared"
+      },
+      {
+        "path": "hooks",
+        "type": "dir",
+        "loc": "claudeShared"
+      }
+    ]
+  }
+}
