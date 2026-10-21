@@ -1,0 +1,153 @@
+name: diagnosis gate
+
+# B-11179. THE HALF A COMMIT HOOK CANNOT ENFORCE.
+#
+# The commit-msg hook is fast local feedback and nothing more. `git commit --no-verify` walks past it,
+# and `core.hooksPath` is LOCAL config that cannot be committed, so a fresh clone carries the gate's
+# files and runs none of them. Worse, a hooksPath pointing at a directory with no commit-msg makes git
+# run NO hook while the commit succeeds: the config asserts a gate while nothing gates. That state was
+# hit live on 2026-09-22 in two member repos and found by those sessions, not by the gate.
+#
+# This job is the half that holds. It runs on the PR, where --no-verify cannot reach and no local
+# config is involved, and it reads the same gate the hook reads, so the two cannot drift.
+
+# BOTH PATHS, because a PR-only trigger covers only the traffic that uses PRs. Measured by tower-8f
+# on 2026-09-23: of their last 12 commits to main, 4 were PR-shaped and 8 went DIRECT, so a
+# pull_request trigger would have watched a third of the traffic while reporting itself as coverage.
+#
+# The push run is HONEST ABOUT WHAT IT IS. A verdict after the commit has landed is a REPORT, not a
+# gate: it cannot refuse anything, it can only say so afterwards. That is the same distinction that
+# makes the commit hook insufficient, and naming it is the point. Where branch protection and PRs are
+# used, the pull_request run is the gate; where commits go straight to main, this is the alarm.
+# BOTH BRANCH NAMES, and not because QOS has a `master`. THIS FILE IS THE SOURCE THE INSTALLERS COPY
+# INTO EVERY MEMBER, verbatim, so a branch name hardcoded here is hardcoded into all of them. Written
+# `[main]` alone, it was copied into `quantum-packs`, whose default branch is `master`, where it was
+# registered, active, parseable, and never once scheduled for its entire life. Its run count was zero
+# and that was read as "no first run yet". A gate that cannot receive an event is not a gate, and the
+# presence of the file is not coverage. B-11212; guarded by diagnosis-gate-install.test.mjs.
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+# A newer push supersedes this run; main is not cancelled because a landed commit needs a verdict.
+concurrency:
+  group: diagnosis-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: causal claims carry evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The gate reads every commit message in base..HEAD, so the history must actually be here.
+          # A shallow clone would leave it scanning nothing and reporting clear, which is the exact
+          # failure mode this gate exists to refuse.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: the gate must be present, or this job has verified nothing
+        run: |
+          # FAIL-CLOSED. A missing gate is not a pass. Without this step a deleted or renamed
+          # diagnosis-gate.mjs would make the next step a no-op that exits 0 and reports green.
+          test -f scripts/governance/diagnosis-gate.mjs || {
+            echo "::error::scripts/governance/diagnosis-gate.mjs is missing — the gate could not run, which is not the same as passing"
+            exit 1
+          }
+
+      - name: refuse a causal claim with no diagnosis artifact
+        env:
+          # B-11223: the force-push branch below asks the API whether an open pull request covers
+          # this branch, because that decides whether anything else will judge the range. Without a
+          # token the query fails, and a failed query is UNKNOWN rather than "no PR", which keeps
+          # the step at exit 1 instead of quietly deferring to a run that may not exist.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            # A push: the range is what this push actually added. `before` is all-zeroes for a new
+            # branch or a force-push, in which case there is no honest range and we say so rather
+            # than inventing one that scans nothing and reports clear.
+            BASE="${{ github.event.before }}"
+            case "$BASE" in
+              0000000000000000000000000000000000000000|"")
+                # B-11223. A force-push and a new branch both arrive with an all-zeroes `before`, so
+                # no honest range exists for THIS run. That was exit 1, and exit 1 on a REQUIRED
+                # check turns every amend and every rebase of a pull request red for a reason that
+                # has nothing to do with the code. Amending a trailer, correcting a commit message
+                # and rebasing onto a fixed main are all force-pushes, and this repository's own
+                # gates ask you to do all three.
+                #
+                # The intent is unchanged: A MISSING MEASUREMENT IS NEVER A PASS. What changes is
+                # WHERE it happens. If this branch has an open pull request, that run judges
+                # origin/<base>..HEAD, which is the same code over a strictly better range than any
+                # push could give. The measurement is not skipped; it is performed by the run that
+                # can build an honest range, and this one says so instead of claiming a pass.
+                #
+                # With NO open pull request nothing else judges it, and that is still exit 1.
+                OPEN_PR=$(gh pr list --head "${GITHUB_REF_NAME}" --state open --json number \
+                  --jq 'length' 2>/dev/null || echo "unknown")
+                if [ "$OPEN_PR" = "unknown" ]; then
+                  echo "::error::could not reach the pull-request API, so it is UNKNOWN whether anything else judges this range"
+                  echo "### Diagnosis gate: COULD NOT RUN" >> "$GITHUB_STEP_SUMMARY"
+                  echo "Could not determine whether an open pull request covers this. Unknown is not a pass." >> "$GITHUB_STEP_SUMMARY"
+                  exit 1
+                fi
+                if [ "$OPEN_PR" -gt 0 ]; then
+                  echo "::notice::no usable before-sha (force-push or new branch); an open pull request covers this branch and its run measures the full range, so this push run defers rather than reporting a pass it did not take"
+                  echo "### Diagnosis gate: DEFERRED TO THE PULL REQUEST RUN" >> "$GITHUB_STEP_SUMMARY"
+                  echo "No usable range for this push. NOT a pass: the pull_request run measures origin/<base>..HEAD over the same commits." >> "$GITHUB_STEP_SUMMARY"
+                  exit 0
+                fi
+                echo "::warning::no usable before-sha for this push, and no open pull request, so nothing else will judge this range"
+                echo "### Diagnosis gate: COULD NOT RUN" >> "$GITHUB_STEP_SUMMARY"
+                echo "No usable commit range and no open pull request. This is not a pass." >> "$GITHUB_STEP_SUMMARY"
+                exit 1
+                ;;
+            esac
+          fi
+          git rev-parse --verify "$BASE" >/dev/null 2>&1 || {
+            echo "::error::$BASE is not resolvable, so the commit range could not be built"
+            exit 1
+          }
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "::notice::push to main — this run is a REPORT on commits that have already landed, not a gate"
+          fi
+          # Exit 1 = refused, exit 2 = could-not-read. NEITHER is a pass, and neither is swallowed.
+          node scripts/governance/diagnosis-gate.mjs --range "$BASE"
+
+      # B-11291. ROOT CAUSE PROTOCOL, SECTION 8: "without this section the protocol is a compliance
+      # regime that measures its own paperwork."
+      #
+      # The refuted-cause rate reported 0% and flagged itself SUSPICIOUS with the right instruction:
+      # either the protocol works, or the probes are too weak to detect returns, and check the second
+      # first. Checked. Of 11 CAUSE-ESTABLISHED closures, ZERO carried a reproduce command. The rate was
+      # zero because nothing was re-runnable, not because the causes were right.
+      #
+      # Report-only on coverage (exit 2), blocking on the two things that are real failures: a symptom
+      # that came BACK, and a new established cause shipped with nothing to re-run. The 11 existing ones
+      # are grandfathered, because requiring it backwards would refuse work written before the rule.
+      - name: Root Cause section 8 - recurrence probe coverage (B-11291)
+        continue-on-error: true
+        run: node scripts/diagnosis/recurrence-probe.mjs --gate
+      - name: Root Cause section 8 - a new established cause must be re-runnable (B-11291)
+        run: |
+          set -euo pipefail
+          node --test scripts/diagnosis/recurrence-probe.test.mjs
+          # The forward-looking half BLOCKS: coverage can only improve if new artifacts carry the command.
+          out="$(node scripts/diagnosis/recurrence-probe.mjs || true)"
+          echo "$out"
+          if echo "$out" | grep -q 'with no reproduce command'; then
+            echo "::error::a CAUSE-ESTABLISHED artifact was added with no aba.reproduce, so section 8 can never re-run it"
+            exit 1
+          fi

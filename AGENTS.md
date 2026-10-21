@@ -43,3 +43,11 @@ TODO: Add build commands for this project.
 - Follow existing code patterns and style
 - Match formatting conventions
 - Preserve test coverage
+
+## Protocols that bind every agent here
+
+`CLAUDE.md`'s two MANDATORY sections apply to every agent, not only Claude. Five protocols bind:
+Root Cause (`docs/governance/DIAGNOSIS_PROTOCOL.md`) and the Correction Loop with its `Caller:` trailer
+(`docs/governance/CORRECTION_LOOP.md`), whose gates refuse; and Descent, Handoff and Reconciliation
+(`docs/governance/protocols/`), installed 2026-10-21, whose gates are report-only for now.
+Report-only describes the gate, not the rule.

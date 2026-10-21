@@ -1,0 +1,73 @@
+#!/bin/sh
+# QOS diagnosis gate (B-11179), installed by scripts/governance/diagnosis-gate-install.mjs.
+#
+# Refuses a commit message that asserts a CAUSE without a diagnosis artifact backing it.
+# The protocol: docs/governance/DIAGNOSIS_PROTOCOL.md. Artifacts: docs/state/diagnosis/<ITEM>.json.
+#
+# Do not hand-edit. Re-run the installer to update; it is idempotent.
+ROOT="$(git rev-parse --show-toplevel)"
+
+# B-2372: a hook must not depend on its caller's PATH (launchd/cron give a PATH without node).
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"; export PATH
+
+# COULD-NOT-RUN IS NOT A VIOLATION (R-14.4), and it is not a pass either.
+command -v node >/dev/null 2>&1 || {
+  echo "[diagnosis] COULD NOT RUN: node is not on PATH, so the diagnosis gate never ran." >&2
+  exit 1
+}
+
+# NEVER `|| true`. Exit 2 (could-not-read) blocks too: a gate that cannot see its inputs has
+# cleared nothing.
+node "$ROOT/scripts/governance/diagnosis-gate.mjs" --commit-msg "$1" >&2
+DIAG=$?
+[ "$DIAG" -ne 0 ] && exit "$DIAG"
+
+
+# B-11204 CORRECTION LOOP, step 4 (installed by correction-loop-install.mjs)
+#
+# A capability commit must name what invokes it unattended. Runs BEFORE the delivery gate because
+# that one `exec`s, which would make anything after it unreachable.
+#
+# The exit code is never swallowed, and UNREADABLE blocks too: a gate that could not look has
+# cleared nothing (R-14.4).
+if [ -f "$ROOT/scripts/governance/correction-loop-gate.mjs" ]; then
+  node "$ROOT/scripts/governance/correction-loop-gate.mjs" "$1" >&2
+  LOOP=$?
+  [ "$LOOP" -ne 0 ] && exit "$LOOP"
+fi
+
+# B-005 DESCENT, HANDOFF, RECONCILIATION, REPORT-ONLY (R-07: gates scaffolded as part of
+# admission, tkt_edhwatnqnp, andrew.kelly 2026-10-19; report-only first per QOS
+# PROTOCOL_DEPLOYMENT_PLAN.md section 3).
+#
+# Copied unedited from QOS 37ecc42db8ce. The first run of every gate on a member is report-only and
+# its output is read before it blocks; turning these to blocking is a second, deliberate change. So
+# each verdict is PRINTED and its exit code is NOT applied.
+#
+# What report-only does NOT mean: silence. A refusal and a could-not-run each print their own line,
+# naming the gate and the exit code, so a report-only gate is visibly not a pass. And a gate file
+# absent from the tree being committed (a branch predating this change) says so rather than skipping.
+#
+# Placed before the delivery-gate `exec` below, which would make anything after it unreachable.
+report_only() {
+  _g="$1"; shift
+  if [ ! -f "$ROOT/$_g" ]; then
+    echo "[B-005 report-only] COULD NOT RUN: $_g is not in this working tree (not a pass)." >&2
+    return 0
+  fi
+  node "$ROOT/$_g" "$@" >&2
+  _rc=$?
+  [ "$_rc" -ne 0 ] && echo "[B-005 report-only] $_g exited $_rc: it WOULD refuse this commit once blocking." >&2
+  return 0
+}
+report_only scripts/governance/undeclared-descent.mjs "$1"
+report_only scripts/governance/descent-gate.mjs "$1"
+report_only scripts/governance/reconciliation-gate.mjs
+report_only scripts/state/handoff-per-item.mjs --gate
+
+# Chain onward ONLY if this repo actually has a delivery gate. Writing the path unconditionally
+# would fabricate one in every member that has none (R-23.8).
+if [ -f "$ROOT/scripts/governance/delivery-gate.mjs" ]; then
+  exec node "$ROOT/scripts/governance/delivery-gate.mjs" --gate --commit-msg "$1"
+fi
+exit 0

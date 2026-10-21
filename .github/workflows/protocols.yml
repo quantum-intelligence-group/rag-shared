@@ -1,0 +1,139 @@
+name: protocols
+
+# B-46. Descent, Handoff and Reconciliation, installed by operator ruling qos:B-11746 (option A) at QOS
+# pin 37ecc42db8ce. The commit-msg hook is the fast local half; this is the half a commit hook cannot
+# enforce, because `git commit --no-verify` walks past a hook and core.hooksPath is local config that a
+# fresh clone does not carry. Same reasoning as diagnosis-gate.yml, which this mirrors.
+#
+# REPORT-ONLY FIRST, by ruling. Every gate RUNS and its verdict is written to the job summary; a refusal
+# does not fail the job while PROTOCOLS_ENFORCE is '0'. Promotion is flipping that one value in a
+# reviewed commit, here and in scripts/governance/hooks/commit-msg together.
+#
+# What is NOT report-only, in either mode: a MISSING GATE FILE FAILS THE JOB. Report-only governs what
+# happens when a gate refuses; it does not license a gate that never ran. A deleted gate that exited 0
+# would read as green, which is exactly the failure a fail-closed check exists to refuse.
+#
+# KNOWN GAP: undeclared-descent anchors the item id to the start of the subject, so it cannot see this
+# repo's conventional-commit subjects (`fix(B-030): x`) and returns OK for them while judging nothing.
+# Reported to qos 2026-10-21. Its verdicts below are real for subjects that lead with the id, and blind
+# for the rest.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: protocols-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PROTOCOLS_ENFORCE: '0'
+
+jobs:
+  gate:
+    name: protocols bind (descent, handoff, reconciliation)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The descent gates read every commit message in base..HEAD; a shallow clone would scan
+          # nothing and report clear.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: every gate must be present, or this job has verified nothing
+        run: |
+          missing=0
+          for f in \
+            scripts/governance/descent-gate.mjs \
+            scripts/governance/undeclared-descent.mjs \
+            scripts/governance/handoff-gate.mjs \
+            scripts/governance/reconciliation-gate.mjs \
+            scripts/governance/item-namespaces.mjs \
+            scripts/governance/chain-record.mjs \
+            scripts/state/handoff-derive.mjs \
+            scripts/state/handoff-per-item.mjs \
+            scripts/backlog/reconciliation.mjs ; do
+            test -f "$f" || { echo "::error::$f is missing — that gate could not run, which is not the same as passing"; missing=1; }
+          done
+          exit "$missing"
+
+      - name: the gates' own tests pass here
+        run: |
+          node --test --test-force-exit \
+            scripts/governance/descent-gate.test.mjs scripts/governance/undeclared-descent.test.mjs \
+            scripts/governance/handoff-gate.test.mjs scripts/governance/reconciliation-gate.test.mjs \
+            scripts/governance/item-namespaces.test.mjs scripts/governance/chain-record.test.mjs \
+            scripts/state/handoff-derive.test.mjs scripts/state/handoff-per-item.test.mjs \
+            scripts/backlog/reconciliation.test.mjs
+
+      - name: run every gate, report each verdict
+        # ERREXIT, AND WHY EVERY GATE CALL IS `rc=0; node ... || rc=$?`. Actions runs this step with
+        # `bash -e`, so a bare `node gate; report $?` aborts the step the instant a gate refuses —
+        # before the verdict is reported and before the report-only check runs. The first run of this
+        # job failed exactly that way: handoff-per-item exited 1 and the step died. `|| rc=$?` captures
+        # the code where errexit cannot intercept it. It does NOT swallow it: rc is reported by name and,
+        # under PROTOCOLS_ENFORCE=1, fails the job.
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="${{ github.event.before }}"
+            case "$BASE" in
+              0000000000000000000000000000000000000000|"")
+                echo "::warning::no usable before-sha for this push (new branch or force-push)"
+                echo "### Protocols: COULD NOT BUILD A RANGE" >> "$GITHUB_STEP_SUMMARY"
+                echo "No usable commit range for this push. This is not a pass." >> "$GITHUB_STEP_SUMMARY"
+                exit 1 ;;
+            esac
+          fi
+          git rev-parse --verify "$BASE" >/dev/null 2>&1 || { echo "::error::$BASE is not resolvable"; exit 1; }
+
+          refused=0
+          {
+            echo "### Protocols (report-only: \`PROTOCOLS_ENFORCE=$PROTOCOLS_ENFORCE\`)"
+            echo ""
+            echo "| gate | subject | verdict |"
+            echo "|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          report() {  # gate, subject, exit code
+            v=OK; [ "$3" -eq 0 ] || { v="REFUSED (exit $3)"; refused=1; }
+            echo "| $1 | $2 | $v |" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          # Descent judges each commit message in the range, as the hook does.
+          n=0
+          for sha in $(git rev-list --no-merges "$BASE..HEAD"); do
+            n=$((n+1))
+            git log -1 --format=%B "$sha" > /tmp/msg.txt
+            subj=$(git log -1 --format=%s "$sha" | cut -c1-60)
+            rc=0; node scripts/governance/undeclared-descent.mjs /tmp/msg.txt || rc=$?; report undeclared-descent "$subj" $rc
+            rc=0; node scripts/governance/descent-gate.mjs /tmp/msg.txt || rc=$?;        report descent "$subj" $rc
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Descent judged **$n** commit(s) in \`$BASE..HEAD\`." >> "$GITHUB_STEP_SUMMARY"
+
+          # RECONCILIATION READS THE STAGED DIFF (`git diff --cached`), because it is a commit-time gate.
+          # In this clean CI checkout nothing is staged, so run as-is it sees an empty diff and passes
+          # EVERY time — measured on this job's first green run: "this commit adds no backlog item" on a
+          # PR that added one. That made CI, the half `--no-verify` cannot reach, enforce nothing.
+          # `git reset --soft "$BASE"` moves HEAD to the base and leaves the index at the PR's content,
+          # so `--cached` is exactly what this range adds. It runs AFTER the descent loop above, which
+          # needs the real HEAD, and it only touches this throwaway checkout. The gate is not edited.
+          git reset -q --soft "$BASE"
+          rc=0; node scripts/governance/reconciliation-gate.mjs || rc=$?;        report reconciliation "$BASE..HEAD" $rc
+          rc=0; node scripts/state/handoff-per-item.mjs --gate || rc=$?;         report handoff-per-item "docs/state/HANDOFF.md" $rc
+          rc=0; node scripts/governance/handoff-gate.mjs --gate || rc=$?;        report handoff "docs/state/HANDOFF.md" $rc
+
+          if [ "$refused" -ne 0 ]; then
+            if [ "$PROTOCOLS_ENFORCE" = "1" ]; then exit 1; fi
+            echo "::warning::one or more protocol gates refused; REPORT-ONLY under qos:B-11746, not failing the job"
+          fi
