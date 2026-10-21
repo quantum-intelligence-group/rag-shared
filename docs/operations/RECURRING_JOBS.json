@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "description": "Recurring jobs in THIS repository. Seeded empty by correction-loop-install, because the caller resolver needs a registry to resolve scheduler: trailers against. An empty jobs array is a claim that this repo schedules nothing. If that is wrong, add the jobs; do not delete the file.",
+  "heartbeat_store": null,
+  "conventions": {},
+  "jobs": []
+}
