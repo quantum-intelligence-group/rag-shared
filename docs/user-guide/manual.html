@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>rag-shared: User Manual</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  /* QIG brand palette (mirrors assets/brand.css where present) */
+  :root {
+    --bg: #FBF7EE; --surface: #ffffff; --border: #9BB7D4; --accent: #1F4ED8;
+    --accent-lt: #dce7fb; --text: #2F2F33; --muted: #6c757d; --code-bg: #f1f3f5;
+    --warn-bg: #fdf0e3; --warn-bd: #C06A1A; --radius: 6px;
+    --font-sans: "Segoe UI", system-ui, sans-serif;
+    --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  body { margin: 0; font-family: var(--font-sans); font-size: 15px; line-height: 1.65; color: var(--text); background: var(--bg); }
+  h1, h2, h3, h4 { font-family: Georgia, serif; color: #0A1E2F; }
+  .page-header { background: var(--accent); color: #fff; padding: 2rem 2rem 1.5rem; }
+  .page-header h1 { margin: 0; font-size: 1.75rem; color: #fff; }
+  .page-header .subtitle { opacity: 0.85; margin-top: 0.35rem; font-size: 0.9rem; }
+  .layout { display: flex; max-width: 1100px; margin: 0 auto; padding: 2rem 1rem 4rem; gap: 2.5rem; }
+  .toc { flex: 0 0 220px; }
+  .toc-inner { position: sticky; top: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; }
+  .toc h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+  .toc ol { margin: 0; padding-left: 1.2rem; font-size: 0.88rem; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .content { flex: 1; min-width: 0; }
+  section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+  section h2 { margin-top: 0; font-size: 1.35rem; }
+  section h3 { font-size: 1.08rem; margin-top: 1.25rem; }
+  code { font-family: var(--font-mono); background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.88em; }
+  pre { background: var(--code-bg); padding: 0.85rem 1rem; border-radius: var(--radius); overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-size: 0.9rem; }
+  th, td { border: 1px solid var(--border); padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: var(--accent-lt); }
+  .callout { background: var(--accent-lt); border-left: 4px solid var(--accent); padding: 0.75rem 1rem; border-radius: var(--radius); margin: 0.75rem 0; }
+  .warn { background: var(--warn-bg); border-left: 4px solid var(--warn-bd); padding: 0.75rem 1rem; border-radius: var(--radius); margin: 0.75rem 0; }
+  footer { max-width: 1100px; margin: 0 auto; padding: 0 1rem 2rem; color: var(--muted); font-size: 0.85rem; }
+  @media (max-width: 800px) { .layout { flex-direction: column; } .toc { flex: none; } }
+</style>
+</head>
+<body>
+<header class="page-header">
+  <h1>rag-shared: User Manual</h1>
+  <div class="subtitle">Shared logging, observability and cache library for the Nexus RAG Python services</div>
+</header>
+<div class="layout">
+  <nav class="toc" aria-label="Table of contents">
+    <div class="toc-inner">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#overview">1. What rag-shared is</a></li>
+        <li><a href="#install">2. Installing</a></li>
+        <li><a href="#logging">3. Logging</a></li>
+        <li><a href="#observability">4. Tracing and operational events</a></li>
+        <li><a href="#cache">5. Dragonfly cache client</a></li>
+        <li><a href="#config">6. Configuration (environment variables)</a></li>
+        <li><a href="#testing">7. Development and tests</a></li>
+        <li><a href="#troubleshooting">8. Troubleshooting and limits</a></li>
+      </ol>
+    </div>
+  </nav>
+  <main class="content">
+    <section id="overview">
+      <h2>1. What rag-shared is</h2>
+      <p><code>rag-shared</code> is a Python library, not a running service. It packages three utilities that the Python services of the Nexus RAG pipeline import so that they log, trace and cache in the same way:</p>
+      <ul>
+        <li><strong>Readable logging</strong> (<code>rag_shared.logging</code>): a "Milvus-style" bracket log format written to stdout.</li>
+        <li><strong>OpenTelemetry observability</strong> (<code>rag_shared.observability</code>): one-call tracing setup with OTLP export, plus a JSON operational-event emitter that the log relay forwards to Loki.</li>
+        <li><strong>Dragonfly/Redis cache client</strong> (<code>rag_shared.dragonfly</code>): a small pickle-based key/value client used to pass payloads between workflow stages.</li>
+      </ul>
+      <p>The package is named <code>rag-shared</code>, version <code>2.0.0</code> (from <code>pyproject.toml</code> and <code>__version__</code>), requires Python 3.10 or newer and is built with <code>hatchling</code> from <code>src/rag_shared</code>.</p>
+      <div class="callout">Where it sits: in this group of repositories, <code>rag-developer</code>, <code>rag-download</code>, <code>rag-embed-index</code>, <code>rag-metadata</code> and <code>rag-milvus-index</code> list it in their <code>requirements.txt</code>. The Rust services (for example <code>rag-chunking</code>) do not use it; they carry their own <code>observability.rs</code>.</div>
+    </section>
+
+    <section id="install">
+      <h2>2. Installing</h2>
+      <p>The README gives the install commands. The package is installed straight from GitHub:</p>
+<pre><code># Basic (logging + dragonfly client)
+pip install git+https://github.com/quantum-intelligence-group/rag-shared.git
+
+# With OpenTelemetry observability
+pip install "rag-shared[observability] @ git+https://github.com/quantum-intelligence-group/rag-shared.git"</code></pre>
+      <h3>Dependencies and extras</h3>
+      <table>
+        <tr><th>Extra</th><th>What it adds (from <code>pyproject.toml</code>)</th></tr>
+        <tr><td>(none)</td><td><code>redis&gt;=5.0.0</code> only. Logging needs nothing beyond the standard library.</td></tr>
+        <tr><td><code>observability</code></td><td>OpenTelemetry API, SDK, OTLP gRPC exporter and instrumentations for FastAPI, requests, httpx and logging.</td></tr>
+        <tr><td><code>flask</code></td><td><code>opentelemetry-instrumentation-flask</code>.</td></tr>
+        <tr><td><code>database</code></td><td><code>asyncpg&gt;=0.29.0</code>. No module in <code>src/rag_shared</code> imports it today.</td></tr>
+        <tr><td><code>all</code></td><td>observability, flask and database together.</td></tr>
+        <tr><td><code>dev</code></td><td>pytest, pytest-asyncio, black, ruff, mypy.</td></tr>
+      </table>
+      <p>The OpenTelemetry imports are wrapped in <code>try/except ImportError</code>, so <code>import rag_shared</code> works without the <code>observability</code> extra; tracing simply does nothing and prints a warning telling you to install the extra.</p>
+    </section>
+
+    <section id="logging">
+      <h2>3. Logging</h2>
+      <h3>Setup</h3>
+<pre><code>from rag_shared import setup_logging, get_logger, timed
+
+setup_logging()              # once at startup; level from LOG_LEVEL, default INFO
+logger = get_logger(__name__)
+logger.info("Chunk created", extra={"chunk_id": "abc", "size": 1024})</code></pre>
+      <p><code>setup_logging(level=None)</code> clears every handler on the root logger, installs one <code>StreamHandler</code> on <code>sys.stdout</code> with <code>MilvusFormatter</code>, and sets <code>urllib3</code>, <code>httpx</code>, <code>httpcore</code>, <code>asyncio</code> and <code>opentelemetry</code> to WARNING. An unknown level name falls back to INFO.</p>
+      <h3>Log line format</h3>
+<pre><code>[timestamp] [LEVEL] [module:line] ["message"] [key=value] ...
+[2025/12/31 18:42:23.765 +00:00] [INFO] [main:15] ["Chunk created"] [chunk_id=abc] [size=1024]</code></pre>
+      <p>Timestamps are always UTC. Context fields come first, then any <code>extra=</code> fields, then <code>[exception=Type: message]</code> when <code>exc_info</code> is set. Values are rendered by <code>_format_value</code>: <code>None</code> becomes <code>null</code>, booleans are lower case, strings with spaces are quoted, and non-integer floats are rounded to two decimals.</p>
+      <h3>Timing and request context</h3>
+      <table>
+        <tr><th>Function</th><th>Behaviour</th></tr>
+        <tr><td><code>timed(operation, logger=None, **extra)</code></td><td>Context manager. On success logs <code>"&lt;operation&gt; completed"</code> with <code>duration_ms</code>; on an exception logs <code>"&lt;operation&gt; failed"</code> at ERROR with <code>duration_ms</code> and <code>error</code>, then re-raises. It yields a dict you can add fields to.</td></tr>
+        <tr><td><code>log_context(**fields)</code></td><td>Adds fields to every log line inside the block, using a <code>ContextVar</code>, so it is safe across asyncio tasks.</td></tr>
+        <tr><td><code>clear_log_context()</code></td><td>Empties the current context.</td></tr>
+      </table>
+      <h3>Deprecated names that still work</h3>
+      <p>For code written against v1.x: <code>configure_logging(...)</code> calls <code>setup_logging</code> and ignores <code>service_name</code>, <code>service_version</code>, <code>environment</code> and <code>json_output</code>; <code>stage</code> is <code>timed</code>; <code>RequestContext</code> wraps <code>log_context</code>; <code>add_context</code>, <code>clear_context</code> and <code>request_context</code> are kept; <code>StructuredJSONFormatter</code> is now an alias of <code>MilvusFormatter</code>, so it no longer produces JSON.</p>
+    </section>
+
+    <section id="observability">
+      <h2>4. Tracing and operational events</h2>
+<pre><code>from fastapi import FastAPI
+from rag_shared import setup_observability
+
+app = FastAPI()
+logger = setup_observability("my-service", app)</code></pre>
+      <p><code>setup_observability(service_name, app=None, instrument_http=True)</code> does the following, in order:</p>
+      <ol>
+        <li>Sets <code>SERVICE_NAME</code> in the environment if it is not already set.</li>
+        <li>Creates a <code>TracerProvider</code> with an OTLP gRPC exporter (insecure) pointed at <code>OTLP_ENDPOINT</code>, with resource attribute <code>service.namespace=rag-orchestration</code>. Skipped when <code>TRACING_ENABLED</code> is not <code>true</code>.</li>
+        <li>Calls <code>setup_logging</code> and, when tracing is on, the OpenTelemetry logging instrumentor for trace correlation. Skipped when <code>STRUCTURED_LOGGING_ENABLED</code> is not <code>true</code>.</li>
+        <li>Instruments the <code>requests</code> and <code>httpx</code> clients.</li>
+        <li>For a FastAPI or Starlette app: instruments it (excluding <code>/health</code>, <code>/healthz</code>, <code>/ready</code>, <code>/metrics</code>, <code>/docs</code>, <code>/openapi.json</code>) and wires the "observability floor" described below. For a Flask app: instruments it only.</li>
+        <li>Emits a <code>service_start</code> JSON event and returns a logger.</li>
+      </ol>
+      <h3>The observability floor (FastAPI only)</h3>
+      <p>The readable bracket logs are dropped by the log relay, which parses each stdout line as JSON. So <code>emit_event(event, level="info", **fields)</code> writes a single JSON line with <code>event</code>, <code>level</code>, <code>service</code> and any non-null fields. For FastAPI apps the floor adds:</p>
+      <ul>
+        <li>An HTTP middleware that emits <code>handler_entry</code> and then one of <code>handler_success</code>, <code>handler_validation_error</code> (4xx), <code>handler_not_found</code> (404), <code>handler_conflict</code> (409) or <code>handler_error</code> (5xx), with <code>method</code>, <code>path</code>, <code>status_code</code>, <code>duration_ms</code> and the <code>x-request-id</code> header. Health, readiness, metrics and docs paths are skipped.</li>
+        <li><code>service_ready</code> at startup and <code>service_shutdown</code> at shutdown, by wrapping the app's existing lifespan.</li>
+        <li>A <code>heartbeat</code> event every 60 seconds carrying <code>service_version</code> (from <code>SERVICE_VERSION</code>, or <code>unknown</code>).</li>
+      </ul>
+      <div class="warn">The code comment on <code>emit_event</code> says the event name must be an allow-listed name (<code>handler_*</code>, <code>service_*</code>, <code>dependency_*</code>, <code>stage_*</code>, <code>job_*</code>, <code>heartbeat</code>) and that only counts and ids may be passed, never content. The library does not enforce either rule; it is on the caller.</div>
+    </section>
+
+    <section id="cache">
+      <h2>5. Dragonfly cache client</h2>
+<pre><code>from rag_shared import get_dragonfly_client
+
+cache = get_dragonfly_client()          # shared singleton by default
+cache.store("my-key", {"data": [1, 2, 3]}, ttl=3600)
+data = cache.retrieve("my-key")</code></pre>
+      <p><code>DragonflyClient</code> connects lazily on first use (redis-py, <code>decode_responses=False</code>, 5 second socket and connect timeouts, retry on timeout, db 0). Values are serialised with <code>pickle</code>, so any Python object can be stored.</p>
+      <table>
+        <tr><th>Method</th><th>Returns</th></tr>
+        <tr><td><code>ping()</code></td><td><code>True</code>, or <code>False</code> on a connection error.</td></tr>
+        <tr><td><code>store(key, data, ttl=None)</code></td><td><code>True</code> on success. Uses <code>SETEX</code> with the default TTL when none is given.</td></tr>
+        <tr><td><code>retrieve(key)</code></td><td>The unpickled object, or <code>None</code> if absent or on error.</td></tr>
+        <tr><td><code>delete(key)</code>, <code>exists(key)</code></td><td>Booleans.</td></tr>
+        <tr><td><code>get_ttl(key)</code></td><td>Seconds, <code>-1</code> for no expiry, <code>-2</code> if missing, <code>None</code> on error.</td></tr>
+        <tr><td><code>set_ttl(key, ttl)</code></td><td>Boolean.</td></tr>
+        <tr><td><code>keys(pattern="*")</code></td><td>List of key names (uses Redis <code>KEYS</code>).</td></tr>
+        <tr><td><code>close()</code></td><td>Closes the connection; the client is also a context manager.</td></tr>
+      </table>
+      <p>Every method catches its own exceptions, logs them at ERROR and returns a falsy value. A cache outage therefore shows up as <code>None</code>/<code>False</code> results plus <code>Failed to ...</code> log lines, not as an exception.</p>
+      <div class="warn">Because values are pickled, only read keys written by trusted services: unpickling untrusted data can execute code. <code>keys()</code> uses <code>KEYS</code>, which scans the whole keyspace and should not be called in a hot path.</div>
+    </section>
+
+    <section id="config">
+      <h2>6. Configuration (environment variables)</h2>
+      <table>
+        <tr><th>Variable</th><th>Default (from code)</th><th>Read by</th></tr>
+        <tr><td><code>LOG_LEVEL</code></td><td><code>INFO</code></td><td><code>setup_logging</code>, <code>RagObservability</code></td></tr>
+        <tr><td><code>DRAGONFLY_HOST</code></td><td><code>dragonfly</code></td><td><code>get_dragonfly_client</code> (the class itself defaults to <code>localhost</code>)</td></tr>
+        <tr><td><code>DRAGONFLY_PORT</code></td><td><code>6379</code></td><td><code>get_dragonfly_client</code></td></tr>
+        <tr><td><code>DRAGONFLY_TTL</code></td><td><code>3600</code> seconds</td><td><code>get_dragonfly_client</code></td></tr>
+        <tr><td><code>SERVICE_NAME</code></td><td><code>unknown-service</code></td><td><code>RagObservability</code>, <code>emit_event</code></td></tr>
+        <tr><td><code>SERVICE_VERSION</code></td><td><code>1.0.0</code> for the trace resource; <code>unknown</code> for heartbeats</td><td><code>RagObservability</code>, heartbeat loop</td></tr>
+        <tr><td><code>ENVIRONMENT</code></td><td><code>development</code></td><td><code>RagObservability</code></td></tr>
+        <tr><td><code>OTLP_ENDPOINT</code></td><td><code>http://localhost:4317</code></td><td><code>RagObservability</code></td></tr>
+        <tr><td><code>TRACING_ENABLED</code></td><td><code>true</code></td><td><code>RagObservability</code></td></tr>
+        <tr><td><code>STRUCTURED_LOGGING_ENABLED</code></td><td><code>true</code></td><td><code>RagObservability</code></td></tr>
+      </table>
+      <p><code>RagObservability</code> is a process-wide singleton that reads these variables once, when <code>rag_shared</code> is first imported. Set them before the import.</p>
+    </section>
+
+    <section id="testing">
+      <h2>7. Development and tests</h2>
+      <p>Tests live in <code>tests/test_logging.py</code> and cover the formatter, <code>timed</code>, <code>log_context</code> and the backward-compatible names. With the <code>dev</code> extra installed, run them with <code>pytest</code>. Formatting and lint settings are in <code>pyproject.toml</code> (black and ruff at line length 100, mypy for Python 3.10). There are no tests for the cache client or the observability module in the repository.</p>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>8. Troubleshooting and limits</h2>
+      <ul>
+        <li><strong>"Warning: OpenTelemetry not installed"</strong> printed at startup: install the <code>observability</code> extra, or set <code>TRACING_ENABLED=false</code> to silence it.</li>
+        <li><strong>Logs from a service do not reach Loki</strong>: only the JSON lines from <code>emit_event</code> are relay-forwardable. Bracket-format log lines are, per the code comment, dropped by the relay.</li>
+        <li><strong>Handler events missing for a Flask app</strong>: the observability floor is wired only for FastAPI and Starlette apps.</li>
+        <li><strong>Another library's log handlers vanish</strong>: <code>setup_logging</code> clears all root handlers by design.</li>
+        <li><strong>Cache returns <code>None</code> unexpectedly</strong>: look for <code>Failed to retrieve data</code> or <code>Dragonfly ping failed</code> in the logs and check <code>DRAGONFLY_HOST</code>/<code>DRAGONFLY_PORT</code>.</li>
+      </ul>
+      <p>There is no Dockerfile, compose file or HTTP interface in this repository; it is consumed only as a pip dependency.</p>
+    </section>
+
+  </main>
+</div>
+<footer>Part of the Nexus RAG platform, a QOS product family member (QOS B-11899). Every statement in this manual is drawn from the files in this repository; where the repository is silent, the manual says so.</footer>
+</body>
+</html>
