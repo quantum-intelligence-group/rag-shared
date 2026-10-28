@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAG Shared: User Manual</title>
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+  code, pre { font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; }
+  pre { background: #f4f4f5; padding: 0.75rem 1rem; overflow-x: auto; border-radius: 6px; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #d4d4d8; padding: 0.4rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: #f4f4f5; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #18181b; color: #e4e4e7; }
+    pre, th { background: #27272a; }
+    th, td { border-color: #3f3f46; }
+  }
+</style>
+</head>
+<body>
+<h1>RAG Shared: User Manual</h1>
+<p>Classification: QIG Confidential. Audience: engineers who build or maintain the Python services of the AI Navigator
+(RAG) pipeline.</p>
+
+<h2>1. What rag-shared does</h2>
+<p>rag-shared is a small Python library, not a running service. It holds the code that several AI Navigator services need
+in common, so each one does not carry its own copy: a structured logger, a request-context helper, an optional
+OpenTelemetry setup for FastAPI services, and a client for the Dragonfly cache (Redis-compatible). Nothing runs on its own;
+a service installs the package and calls it.</p>
+
+<h2>2. What it provides</h2>
+<table>
+<tr><th>Part</th><th>What it gives you</th></tr>
+<tr><td>Logging</td><td><code>setup_logging</code>, <code>get_logger</code>, <code>timed</code> and <code>log_context</code>. Log lines use a
+bracketed format: timestamp, level, module and line, the message, then any key=value fields. <code>timed</code> logs how long a step took.
+<code>log_context</code> adds fields such as a request id to every log line inside a block.</td></tr>
+<tr><td>Observability</td><td><code>setup_observability(service_name, app)</code> wires tracing and structured logging into a FastAPI
+application. It needs the <code>observability</code> extra.</td></tr>
+<tr><td>Cache client</td><td><code>get_dragonfly_client()</code> returns a client with <code>store</code> and <code>retrieve</code> for Python objects,
+with a time-to-live.</td></tr>
+<tr><td>Older names</td><td><code>configure_logging</code> and <code>stage</code> from version 1 still work.</td></tr>
+</table>
+
+<h2>3. Installing and using it</h2>
+<pre>pip install git+https://github.com/quantum-intelligence-group/rag-shared.git
+# with OpenTelemetry support:
+pip install "rag-shared[observability] @ git+https://github.com/quantum-intelligence-group/rag-shared.git"</pre>
+<pre>from rag_shared import setup_logging, get_logger, timed, log_context
+
+setup_logging()                 # once, at start-up
+logger = get_logger(__name__)
+with log_context(request_id="req-123"):
+    with timed("embed_chunks", logger):
+        logger.info("Processing started")</pre>
+<p>Python 3.10 or later is required. The extras are <code>observability</code>, <code>flask</code> and <code>database</code>; <code>all</code>
+installs them together. To work on the library itself, install it in editable mode and run the tests in <code>tests/</code>.</p>
+
+<h2>4. Configuration</h2>
+<table>
+<tr><th>Variable</th><th>Default</th><th>Meaning</th></tr>
+<tr><td><code>LOG_LEVEL</code></td><td>INFO</td><td>Log level: DEBUG, INFO, WARNING or ERROR.</td></tr>
+<tr><td><code>DRAGONFLY_HOST</code>, <code>DRAGONFLY_PORT</code></td><td>dragonfly, 6379</td><td>Cache connection.</td></tr>
+<tr><td><code>DRAGONFLY_TTL</code></td><td>3600</td><td>Default seconds an entry is kept.</td></tr>
+<tr><td><code>SERVICE_NAME</code>, <code>SERVICE_VERSION</code>, <code>ENVIRONMENT</code></td><td>unknown-service, 1.0.0, development</td><td>Labels attached to traces and logs.</td></tr>
+<tr><td><code>OTLP_ENDPOINT</code></td><td>http://localhost:4317</td><td>Where traces are sent when observability is on.</td></tr>
+<tr><td><code>TRACING_ENABLED</code>, <code>STRUCTURED_LOGGING_ENABLED</code></td><td>true</td><td>Switch tracing or structured logging off.</td></tr>
+</table>
+<p>The variables belong to the service that imports the library, so set them in that service's environment.</p>
+
+<h2>5. Troubleshooting</h2>
+<table>
+<tr><th>Symptom</th><th>What to check</th></tr>
+<tr><td>No traces appear</td><td>Check that the <code>observability</code> extra is installed, <code>TRACING_ENABLED</code> is true and <code>OTLP_ENDPOINT</code> is reachable from the service.</td></tr>
+<tr><td>Cache calls fail</td><td>Check <code>DRAGONFLY_HOST</code> and <code>DRAGONFLY_PORT</code> from inside the service's container.</td></tr>
+<tr><td>Log lines are missing a request id</td><td>The code is outside the <code>log_context</code> block.</td></tr>
+<tr><td>An import fails after an upgrade</td><td>Version 2 keeps the version 1 names; check the installed version and the extras.</td></tr>
+</table>
+
+<h2>6. Getting help</h2>
+<p>Raise a ticket for the AI Navigator project in Pulse, naming the service (rag-shared), the request or document
+involved and the time of the failure. Do not attach customer documents, credentials or tokens.</p>
+</body>
+</html>
