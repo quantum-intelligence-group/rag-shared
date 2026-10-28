@@ -34,3 +34,34 @@ Same shape as rag-orchestration PR #61, whose CI is green. Descent, Handoff and 
 5. Known gaps (`qos:B-11749`) and this repository's namespace coverage are stated rather than counted.
 6. CLAUDE.md and AGENTS.md announce all five protocols and agree.
 7. One real CI run of `protocols.yml`. Deletions against the merge base: 0.
+
+---
+
+## Scope lines for the scaffold items
+
+Scope lines and acceptance criteria added 2026-10-28 so the fleet's intake can read these items. Titles and statuses are unchanged. Each fact below was checked against this repository's `main` on 2026-10-28.
+
+### B-001 — Write the rag-shared user manual at docs/user-guide/manual.html (R-25.1) and remove rag-shared from docs/governance/user-manual-baseline.json
+
+**Priority:** HIGH
+**Status:** Pending
+**Source:** 2026-10-28, scope line added for fleet intake (B-12005); the original title and status are unchanged.
+**Scope:** `docs/governance/user-manual-baseline.json`
+**Description:** The manual half of this item is already on `main`: `docs/user-guide/manual.html` was added by pull request #5 (merged 2026-10-28). What remains is the second half of the title: `docs/governance/user-manual-baseline.json` still lists `rag-shared` as grandfathered user-manual debt (`"members": ["rag-shared"]`, `"total": 1`). Remove the entry so `members` is empty and `total` is 0, keeping the file's other fields. Do not edit the manual.
+**Acceptance criteria**
+1. `node -e "const d=require('./docs/governance/user-manual-baseline.json'); process.exit(d.members.includes('rag-shared')||d.total!==d.members.length?1:0)"` exits 0.
+2. `node scripts/compliance/scan.mjs . --gate` exits 0 and prints PASS.
+3. `git diff --stat` shows `docs/governance/user-manual-baseline.json` only.
+
+### B-002 — Replace the scaffolded template prose in docs/ with rag-shared's real architecture, requirements and dependencies
+
+**Priority:** HIGH
+**Status:** Pending
+**Source:** 2026-10-28, scope line added for fleet intake (B-12005); the original title and status are unchanged.
+**Scope:** `docs/architecture/ARCHITECTURE.md`, `docs/product/CAPABILITIES.md`, `docs/standards/DEPENDENCIES.md`
+**Description:** These three files still hold the scaffold's placeholder text (`(not scanned)`, `**unknown**`, `TODO:` lines and the scaffold's three-letter to-be-determined marker): the language table, the build system, the capability table and the dependency list. Replace each placeholder with what the repository actually contains, read from its code, manifests and scripts, and list the files you read in the pull request description. The product requirements and success criteria in `docs/product/PRD.md`, and the use cases, are product decisions: they are not part of this item and must stay as they are. `docs/standards/BUILD_AND_TEST.md` belongs to B-004. State only what you can verify; where a fact is not in the repository, say it is not documented instead of guessing. Write no secret values.
+**Acceptance criteria**
+1. `grep -nE '\(not scanned\)|\*\*unknown\*\*|\bT[B]D\b|TODO:' docs/architecture/ARCHITECTURE.md docs/product/CAPABILITIES.md docs/standards/DEPENDENCIES.md` prints nothing.
+2. Every file path, manifest name and dependency named in those three files exists in the repository.
+3. `node scripts/compliance/scan.mjs . --gate` exits 0 and prints PASS.
+4. `git diff --stat` shows only those three files.
