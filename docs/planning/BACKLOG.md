@@ -13,10 +13,14 @@ author:
 # Backlog — rag-shared
 | ID | Title | Priority | Status |
 |----|-------|----------|--------|
-| B-001 | Write the rag-shared user manual at docs/user-guide/manual.html (R-25.1) and remove rag-shared from docs/governance/user-manual-baseline.json | HIGH | Pending |
+| B-001 | Write the rag-shared user manual at docs/user-guide/manual.html (R-25.1) and remove rag-shared from docs/governance/user-manual-baseline.json | HIGH | Done |
 | B-002 | Replace the scaffolded template prose in docs/ with rag-shared's real architecture, requirements and dependencies | HIGH | Pending |
-| B-003 | Install the CI diagnosis gate (scripts/governance/diagnosis-gate-install.mjs) so fixes follow the Root Cause Protocol | MEDIUM | Pending |
+| B-003 | Install the CI diagnosis gate (scripts/governance/diagnosis-gate-install.mjs) so fixes follow the Root Cause Protocol | MEDIUM | Done |
 | B-004 | Confirm rag-shared's build and test commands in CLAUDE.md run on a clean clone, and wire them into CI | MEDIUM | Pending |
+
+**Closures 2026-10-29:**
+
+- **B-003** (table-only item) **Closed:** 2026-10-29: `ls .github/workflows/diagnosis-gate.yml scripts/governance/diagnosis-gate.mjs scripts/governance/diagnosis-ordering.mjs scripts/diagnosis/recurrence-probe.mjs` -> all present; `gh run list -R quantum-intelligence-group/rag-shared --branch main -w "diagnosis gate" -L 1` -> success on origin/main HEAD; `sh -n scripts/governance/hooks/commit-msg` -> exit 0 and the hook invokes the diagnosis gate. The installer script named in the title is no longer in the tree: the gate it installs is.
 
 ### B-005: install the six QOS protocol gates, Descent/Handoff/Reconciliation report-only, at QOS pin 37ecc42db8ce
 
@@ -44,7 +48,7 @@ Scope lines and acceptance criteria added 2026-10-28 so the fleet's intake can r
 ### B-001 — Write the rag-shared user manual at docs/user-guide/manual.html (R-25.1) and remove rag-shared from docs/governance/user-manual-baseline.json
 
 **Priority:** HIGH
-**Status:** Pending
+**Status:** Done
 **Source:** 2026-10-28, scope line added for fleet intake (B-12005); the original title and status are unchanged.
 **Scope:** `docs/governance/user-manual-baseline.json`
 **Description:** The manual half of this item is already on `main`: `docs/user-guide/manual.html` was added by pull request #5 (merged 2026-10-28). What remains is the second half of the title: `docs/governance/user-manual-baseline.json` still lists `rag-shared` as grandfathered user-manual debt (`"members": ["rag-shared"]`, `"total": 1`). Remove the entry so `members` is empty and `total` is 0, keeping the file's other fields. Do not edit the manual.
@@ -52,6 +56,8 @@ Scope lines and acceptance criteria added 2026-10-28 so the fleet's intake can r
 1. `node -e "const d=require('./docs/governance/user-manual-baseline.json'); process.exit(d.members.includes('rag-shared')||d.total!==d.members.length?1:0)"` exits 0.
 2. `node scripts/compliance/scan.mjs . --gate` exits 0 and prints PASS.
 3. `git diff --stat` shows `docs/governance/user-manual-baseline.json` only.
+
+**Closed:** 2026-10-29: ran `ls docs/user-guide/manual.html` -> present (PR merged 2026-10-28); removed `rag-shared` from docs/governance/user-manual-baseline.json (members [], total 0); ran criterion 1 node -e check -> exit 0; `node scripts/compliance/scan.mjs . --gate` -> exit 0, "FRAMEWORK COMPLIANCE GATE: PASS"; `git diff --stat` of the baseline change -> baseline file only (this PR also edits BACKLOG.md to record the closure).
 
 ### B-002 — Replace the scaffolded template prose in docs/ with rag-shared's real architecture, requirements and dependencies
 
