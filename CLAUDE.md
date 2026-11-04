@@ -123,7 +123,7 @@ Complete every step below **in order** before writing any code:
 **Step 2.** Read `docs/state/STATUS.md` — current project state.
 **Step 3.** Read `docs/state/HANDOFF.md` — where the last session stopped.
 **Step 4.** Read `docs/state/OPEN_QUESTIONS.md` — unresolved questions.
-**Step 5.** Read `docs/planning/BACKLOG.md` — prioritized work items.
+**Step 5.** Run `pulse next`: the next work item. Pulse is the work source; BACKLOG.md is retired (qos:PLAN-23).
 **Step 6.** Run `git status` and verify the working tree is clean.
 **Step 7.** Verify tests pass.
 **Step 8.** State the session goal and first task.
