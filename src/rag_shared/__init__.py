@@ -60,6 +60,7 @@ from .dragonfly import (
 from .observability import (
     setup_observability,
     emit_event,
+    exception_sqlstate,
     rag_observability,
     RagObservability,
 )
@@ -89,6 +90,7 @@ __all__ = [
     # Observability
     "setup_observability",
     "emit_event",
+    "exception_sqlstate",
     "rag_observability",
     "RagObservability",
 ]

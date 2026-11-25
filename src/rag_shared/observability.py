@@ -31,6 +31,7 @@ Environment Variables:
 import json
 import logging
 import os
+import re
 import sys
 from typing import Any, Optional
 
@@ -290,6 +291,28 @@ rag_observability = RagObservability()
 # human-readable logger.
 # ──────────────────────────────────────────────────────────────────────────
 
+EVENT_SCHEMA_VERSION = "1.0"
+
+_SQLSTATE_RE = re.compile(r"^[0-9A-Z]{5}$")
+
+
+def exception_sqlstate(exc: BaseException) -> Optional[str]:
+    """Return the SQLSTATE code of a database exception, or None.
+
+    Reads ``exc.sqlstate`` (asyncpg) or ``exc.pgcode`` (psycopg) and returns it
+    only when it is a five-character ``[0-9A-Z]`` code, so it is safe to emit as
+    a telemetry field: it is a class of failure, never message text.
+    """
+    for attr in ("sqlstate", "pgcode"):
+        try:
+            value = getattr(exc, attr, None)
+        except Exception:
+            value = None
+        if isinstance(value, str) and _SQLSTATE_RE.match(value):
+            return value
+    return None
+
+
 def emit_event(event: str, level: str = "info", **fields: Any) -> None:
     """Write one relay-forwardable JSON operational event to stdout.
 
@@ -297,11 +320,16 @@ def emit_event(event: str, level: str = "info", **fields: Any) -> None:
     stage_*, job_*, heartbeat). Never pass content fields — counts/ids only.
     """
     record = {
+        # The relay drops any line whose schema_version is empty, so every
+        # record carries it, first, and a caller cannot override or remove it.
+        "schema_version": EVENT_SCHEMA_VERSION,
         "event": event,
         "level": level,
         "service": os.getenv("SERVICE_NAME", rag_observability.service_name),
     }
     for key, value in fields.items():
+        if key == "schema_version":
+            continue
         if value is not None:
             record[key] = value
     try:
@@ -347,7 +375,23 @@ def _wire_fastapi_floor(app: Any, service_name: str) -> None:
         start = _time.perf_counter()
         if logged:
             emit_event("handler_entry", method=method, path=path, request_id=request_id)
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            if logged:
+                # Emit the class name only: never str(exc), args or traceback,
+                # which can carry content. Guarded so telemetry can never
+                # replace the original exception, which is re-raised unchanged.
+                try:
+                    emit_event(
+                        "handler_error", level="error", method=method, path=path,
+                        status_code=500,
+                        duration_ms=round((_time.perf_counter() - start) * 1000),
+                        request_id=request_id, error_type=type(exc).__name__,
+                    )
+                except Exception:
+                    pass
+            raise
         if logged:
             duration_ms = round((_time.perf_counter() - start) * 1000)
             sc = response.status_code
